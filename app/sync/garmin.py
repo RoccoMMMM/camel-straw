@@ -55,7 +55,7 @@ def activity_row(a: dict) -> dict:
         "source": "garmin",
         "garmin_id": str(a["activityId"]),
         "name": a.get("activityName"),
-        "sport": normalise_sport((a.get("activityType") or {}).get("typeKey")),
+        "sport": normalise_sport((a.get("activityType") or {}).get("typeKey"), a.get("activityName")),
         "start_time": start.isoformat(),
         "date": start.date().isoformat(),
         "duration_s": num(a.get("duration")),
@@ -73,9 +73,27 @@ def activity_row(a: dict) -> dict:
     }
 
 
+def drop_multisport_parents(acts: list[dict]) -> list[dict]:
+    """A Garmin triathlon is a multisport parent plus one child per leg. When the legs are present,
+    keep them (per-sport detail) and drop the parent so the race isn't counted twice."""
+    ids = {a.get("activityId") for a in acts}
+    return [a for a in acts if not (a.get("childIds") and any(c in ids for c in a["childIds"]))]
+
+
 def store_activity(conn, a: dict) -> str:
     row = activity_row(a)
     if conn.execute("SELECT 1 FROM activities WHERE id=?", (row["id"],)).fetchone() is None:
+        if row["sport"] == "multisport" and row["duration_s"]:
+            # Strava may hold the race as separate swim/bike/run legs: fold them all into this record.
+            t0 = parse_local(row["start_time"]).timestamp()
+            legs = [r for r in conn.execute("SELECT * FROM activities WHERE source='strava' AND date=?", (row["date"],))
+                    if t0 - 180 <= parse_local(r["start_time"]).timestamp() <= t0 + row["duration_s"] + 180]
+            if legs:
+                row["strava_id"] = legs[0]["strava_id"]
+                row["suffer_score"] = sum(r["suffer_score"] or 0 for r in legs) or None
+                conn.executemany("DELETE FROM activities WHERE id=?", [(r["id"],) for r in legs])
+                db.upsert(conn, "activities", row, key="id", keep_existing=True)
+                return "merged"
         dup = find_duplicate(conn, parse_local(row["start_time"]), row["duration_s"], "garmin")
         if dup is not None and dup["source"] == "strava":
             # Replace the Strava copy with the richer Garmin record but keep the Strava link/effort.
@@ -191,7 +209,7 @@ def sync(days: int | None = None) -> str:
     acts = g.get_activities_by_date(start.isoformat(), today.isoformat()) or []
     counts = {"stored": 0, "merged": 0}
     with db.tx(conn):
-        for a in acts:
+        for a in drop_multisport_parents(acts):
             counts[store_activity(conn, a)] += 1
 
     n_days = 0

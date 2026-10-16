@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import Any
 
 SPORT_MAP = {
+    "multisport": ["multi_sport", "multisport", "triathlon", "duathlon", "aquathlon", "brick"],
+    "ruck": ["ruck"],
     "run": ["run", "treadmill", "trail", "track"],
     "ride": ["ride", "cycling", "bike", "biking", "velomobile", "handcycle"],
     "swim": ["swim"],
@@ -18,7 +20,11 @@ SPORT_MAP = {
 }
 
 
-def normalise_sport(raw: str | None) -> str:
+def normalise_sport(raw: str | None, name: str | None = None) -> str:
+    """Map a provider sport type to our categories. Neither Garmin nor Strava has a rucking type
+    (rucks are usually saved as hike/walk), so an activity *named* "ruck" counts as a ruck."""
+    if "ruck" in (name or "").lower():
+        return "ruck"
     s = (raw or "").lower()
     # Order matters: "virtualride" -> ride, "trail_running" -> run, etc.
     for sport, needles in SPORT_MAP.items():
@@ -69,6 +75,10 @@ def find_duplicate(conn: sqlite3.Connection, start: datetime, duration_s: float 
         (exclude_source, (start.date()).isoformat(), (start.date()).isoformat()),
     ):
         t = parse_local(r["start_time"]).timestamp()
+        # A triathlon saved as one multisport activity on one side and as separate swim/bike/run on
+        # the other: each leg that falls inside the multisport window is the same effort.
+        if r["sport"] == "multisport" and r["duration_s"] and t - 180 <= start.timestamp() <= t + r["duration_s"] + 180:
+            return r
         if lo <= t <= hi:
             d = r["duration_s"] or 0
             if not duration_s or not d or abs(d - duration_s) <= 0.1 * max(d, duration_s):

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import secrets
 from contextlib import asynccontextmanager
@@ -14,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analytics, config, db, diagnostics
+from . import analytics, coach, config, db, diagnostics
 from .sync import garmin, runner, strava
 
 STATIC = Path(__file__).parent / "static"
@@ -186,6 +187,7 @@ def status() -> dict[str, Any]:
         "strava": {"configured": strava.configured(), "connected": bool(tok),
                    "athlete": " ".join(filter(None, [athlete.get("firstname"), athlete.get("lastname")])) or None},
         "auto_sync_hours": config.AUTO_SYNC_HOURS,
+        "coach": {"configured": coach_configured(), "model": coach.MODEL},
         "counts": {
             "activities": conn.execute("SELECT COUNT(*) FROM activities").fetchone()[0],
             "wellness_days": conn.execute("SELECT COUNT(*) FROM daily_metrics").fetchone()[0],
@@ -262,3 +264,49 @@ def strava_callback(code: str | None = None, state: str | None = None, error: st
 def strava_disconnect() -> dict[str, Any]:
     db.save_token("strava", None)
     return {"ok": True}
+
+
+# ---- AI coach chat -----------------------------------------------------------
+
+def coach_configured() -> bool:
+    return bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN") or os.getenv("ANTHROPIC_PROFILE")
+                or (Path.home() / ".config" / "anthropic").exists())
+
+
+class ChatIn(BaseModel):
+    message: str = Field(min_length=1, max_length=8000)
+    conversation_id: int | None = None
+
+
+@app.post("/api/chat")
+def chat(body: ChatIn) -> dict[str, Any]:
+    import anthropic
+
+    try:
+        return coach.chat(body.message.strip(), body.conversation_id)
+    except anthropic.AuthenticationError:
+        raise HTTPException(400, "The coach needs an Anthropic API key: add ANTHROPIC_API_KEY to .env and restart.")
+    except anthropic.PermissionDeniedError as e:
+        raise HTTPException(400, f"Anthropic API permission error: {e.message}")
+    except anthropic.RateLimitError:
+        raise HTTPException(429, "Anthropic rate limit hit. Wait a minute and try again.")
+    except anthropic.BadRequestError as e:
+        raise HTTPException(400, f"Anthropic API rejected the request: {e.message}")
+    except anthropic.APIStatusError as e:
+        raise HTTPException(502, f"Anthropic API error ({e.status_code}). Try again shortly.")
+    except anthropic.APIConnectionError:
+        raise HTTPException(502, "Couldn't reach the Anthropic API. Check your internet connection.")
+
+
+@app.get("/api/chat")
+def chat_list() -> dict[str, Any]:
+    conn = db.get_conn()
+    coach.ensure_schema(conn)
+    return {"conversations": coach.list_conversations(conn)}
+
+
+@app.get("/api/chat/{conv_id}")
+def chat_get(conv_id: int) -> dict[str, Any]:
+    conn = db.get_conn()
+    coach.ensure_schema(conn)
+    return {"conversation_id": conv_id, "messages": coach.transcript(conn, conv_id)}

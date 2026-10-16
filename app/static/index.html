@@ -12,6 +12,7 @@
   <div class="brand">Training Dashboard</div>
   <nav class="tabs" role="tablist">
     <a href="#overview" data-tab="overview">Overview</a>
+    <a href="#coach" data-tab="coach">Coach</a>
     <a href="#training" data-tab="training">Training</a>
     <a href="#recovery" data-tab="recovery">Recovery &amp; Sleep</a>
     <a href="#habits" data-tab="habits">Habits</a>
@@ -52,6 +53,41 @@
         <h2>Fitness &amp; fatigue</h2>
         <p class="sub">Fitness = 42-day training load, fatigue = 7-day load</p>
         <div class="chart"><canvas id="c-fitness-overview"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COACH -->
+  <section id="tab-coach" class="tab">
+    <div class="coach">
+      <aside class="card coach-side">
+        <button class="btn" id="chat-new" type="button">New chat</button>
+        <h2 class="side-h">Recent</h2>
+        <ul id="chat-list" class="chat-list"></ul>
+      </aside>
+      <div class="card coach-main">
+        <div id="coach-setup" class="coach-setup" hidden>
+          <strong>Set up the coach:</strong> add <code>ANTHROPIC_API_KEY</code> to your <code>.env</code> file and restart the app (see README).
+        </div>
+        <div id="chat-log" class="chat-log" aria-live="polite">
+          <div class="chat-empty" id="chat-empty">
+            <h2>Ask your coach</h2>
+            <p class="muted">It reads your synced activities, sleep, HRV and habit log before answering. Tell it about your habits and it logs them for you.</p>
+            <div class="chips" id="chat-chips">
+              <button type="button">Why was my run today so bad?</button>
+              <button type="button">How recovered am I from last week's race?</button>
+              <button type="button">Last night: 3 beers, bed at 00:30, up at 6:45, slept badly</button>
+              <button type="button">Today I ate about 2,400 kcal and 120 g protein</button>
+              <button type="button">What's the biggest thing holding back my fitness right now?</button>
+              <button type="button">Should I train hard tomorrow?</button>
+            </div>
+          </div>
+        </div>
+        <form id="chat-form" class="chat-form">
+          <label class="sr-only" for="chat-input">Message</label>
+          <textarea id="chat-input" rows="2" maxlength="8000" placeholder="Ask about your training, or log habits: 'had 2 glasses of wine, bed at 11:40'"></textarea>
+          <button class="btn" type="submit" id="chat-send">Send</button>
+        </form>
       </div>
     </div>
   </section>

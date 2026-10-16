@@ -4,7 +4,7 @@
 
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
-  const state = { data: null, range: 90, efSport: "run", charts: {} };
+  const state = { data: null, range: 90, efSport: "run", charts: {}, conv: null, chatBusy: false };
 
   // ---------- utilities ----------
   async function api(path, opts = {}) {
@@ -152,6 +152,7 @@
     if (q.get("strava") === "scope") toast("Please allow 'View data about your activities' when connecting Strava.");
     if (tab === "settings") loadStatus();
     if (tab === "habits") loadHabit($("#habit-form [name=date]").value);
+    if (tab === "coach") { loadChatList(); loadCoachStatus(); setTimeout(() => $("#chat-input").focus(), 50); }
     // Charts in hidden tabs have zero size; redraw the visible ones.
     requestAnimationFrame(() => Object.values(state.charts).forEach((c) => c.resize()));
   }
@@ -464,7 +465,115 @@
     } catch (e) { toast(e.message); }
   }
 
+
+  // ---------- coach chat ----------
+  // Minimal, safe markdown: paragraphs, bullet/numbered lists, ### headings, **bold**, *italic*, `code`.
+  function inline(text, parent) {
+    const re = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*)/g;
+    let last = 0, m;
+    while ((m = re.exec(text))) {
+      if (m.index > last) parent.append(text.slice(last, m.index));
+      const t = m[0];
+      if (t.startsWith("**")) parent.append(el("strong", { text: t.slice(2, -2) }));
+      else if (t.startsWith("`")) parent.append(el("code", { text: t.slice(1, -1) }));
+      else parent.append(el("em", { text: t.slice(1, -1) }));
+      last = m.index + t.length;
+    }
+    if (last < text.length) parent.append(text.slice(last));
+    return parent;
+  }
+  function renderMarkdown(md) {
+    const frag = document.createDocumentFragment();
+    let list = null;
+    md.split("\n").forEach((raw) => {
+      const line = raw.trimEnd();
+      const bullet = line.match(/^\s*[-*•]\s+(.*)/), num = line.match(/^\s*\d+[.)]\s+(.*)/), head = line.match(/^#{1,4}\s+(.*)/);
+      if (bullet || num) {
+        const tag = bullet ? "ul" : "ol";
+        if (!list || list.tagName.toLowerCase() !== tag) { list = el(tag); frag.append(list); }
+        list.append(inline((bullet || num)[1], el("li")));
+        return;
+      }
+      list = null;
+      if (!line.trim()) return;
+      if (head) frag.append(inline(head[1], el("h4")));
+      else frag.append(inline(line, el("p")));
+    });
+    return frag;
+  }
+
+  function chatMessage(m) {
+    if (m.role === "user") return el("div", { class: "msg user", text: m.text });
+    const div = el("div", { class: "msg assistant" });
+    div.append(renderMarkdown(m.text || ""));
+    (m.logged || []).forEach((l) => {
+      const parts = Object.entries(l.fields || {}).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`);
+      div.append(el("div", { class: "logged", text: `✓ Logged for ${l.date} — ${parts.join(", ")}` }));
+    });
+    if (m.tools?.length) div.append(el("div", { class: "meta", text: "Looked at: " + m.tools.join(", ") }));
+    return div;
+  }
+
+  function showChat(messages) {
+    const log = $("#chat-log");
+    log.replaceChildren();
+    if (!messages.length) { log.append(chatEmpty); return; }
+    messages.filter((m) => !m.interim).forEach((m) => log.append(chatMessage(m)));
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function loadChatList() {
+    try {
+      const r = await api("/api/chat");
+      const ul = $("#chat-list"); ul.replaceChildren();
+      r.conversations.forEach((c) => {
+        const b = el("button", { type: "button", title: c.title || "", text: c.title || "Conversation" });
+        b.classList.toggle("on", c.id === state.conv);
+        b.addEventListener("click", () => openConversation(c.id));
+        ul.append(el("li", {}, b));
+      });
+    } catch (e) { /* non-fatal */ }
+  }
+
+  async function openConversation(id) {
+    state.conv = id;
+    try {
+      const r = await api(`/api/chat/${id}`);
+      showChat(r.messages);
+    } catch (e) { toast(e.message); }
+    loadChatList();
+  }
+
+  async function sendChat(text) {
+    text = text.trim();
+    if (!text || state.chatBusy) return;
+    state.chatBusy = true;
+    const log = $("#chat-log");
+    if (log.contains(chatEmpty)) log.replaceChildren();
+    log.append(chatMessage({ role: "user", text }));
+    const wait = el("div", { class: "msg assistant thinking", text: "Looking at your data…" });
+    log.append(wait); log.scrollTop = log.scrollHeight;
+    $("#chat-input").value = ""; $("#chat-send").disabled = true;
+    try {
+      const r = await api("/api/chat", { method: "POST", body: { message: text, conversation_id: state.conv } });
+      state.conv = r.conversation_id;
+      wait.replaceWith(chatMessage({ role: "assistant", text: r.reply, tools: r.tools, logged: r.logged }));
+      if (r.logged?.length) load();          // habits changed: refresh charts and diagnostics
+      loadChatList();
+    } catch (e) {
+      wait.replaceWith(el("div", { class: "msg assistant error", text: e.message }));
+    } finally {
+      state.chatBusy = false; $("#chat-send").disabled = false;
+      log.scrollTop = log.scrollHeight; $("#chat-input").focus();
+    }
+  }
+  let chatEmpty;
+
   // ---------- settings ----------
+  async function loadCoachStatus() {
+    try { const s = await api("/api/status"); $("#coach-setup").hidden = s.coach.configured; } catch {}
+  }
+
   async function loadStatus() {
     try {
       const s = await api("/api/status");
@@ -526,6 +635,14 @@
       $$("#ef-sport button").forEach((x) => x.classList.toggle("on", x === b));
       renderEfficiency();
     }));
+
+    chatEmpty = $("#chat-empty");
+    $("#chat-form").addEventListener("submit", (e) => { e.preventDefault(); sendChat($("#chat-input").value); });
+    $("#chat-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(e.target.value); }
+    });
+    $$("#chat-chips button").forEach((b) => b.addEventListener("click", () => sendChat(b.textContent)));
+    $("#chat-new").addEventListener("click", () => { state.conv = null; showChat([]); loadChatList(); $("#chat-input").focus(); });
 
     const hf = $("#habit-form");
     hf.elements.date.addEventListener("change", (e) => loadHabit(e.target.value));

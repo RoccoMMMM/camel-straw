@@ -125,4 +125,28 @@ def seed(conn: sqlite3.Connection, days: int = 180, today: date | None = None, r
                 "notes": None, "updated_at": db.now(),
             })
         prev_drinks = drinks
+
+    # A sprint-to-olympic triathlon 9 days ago and a hard-feeling ruck today, so the coach has a story to explain.
+    tri_day = today - timedelta(days=9)
+    conn.execute("DELETE FROM activities WHERE date IN (?, ?)", (tri_day.isoformat(), today.isoformat()))
+    db.upsert(conn, "activities", {
+        "id": "garmin:tri", "source": "garmin", "garmin_id": "tri", "strava_id": "9990001", "name": "Olympic Triathlon",
+        "sport": "multisport", "start_time": f"{tri_day.isoformat()}T07:30:00", "date": tri_day.isoformat(),
+        "duration_s": 2 * 3600 + 41 * 60, "moving_s": 2 * 3600 + 38 * 60, "distance_m": 51500, "elevation_m": 310,
+        "avg_hr": 163, "max_hr": 184, "avg_speed": 5.4, "calories": 2150, "aerobic_te": 4.8, "anaerobic_te": 2.9,
+    }, key="id")
+    db.upsert(conn, "activities", {
+        "id": "garmin:ruck", "source": "garmin", "garmin_id": "ruck", "strava_id": "9990002", "name": "Ruck 20kg",
+        "sport": "ruck", "start_time": f"{today.isoformat()}T06:40:00", "date": today.isoformat(),
+        "duration_s": 82 * 60, "moving_s": 80 * 60, "distance_m": 7400, "elevation_m": 140,
+        "avg_hr": 146, "max_hr": 168, "avg_speed": 1.54, "calories": 720, "aerobic_te": 3.4, "anaerobic_te": 0.6,
+    }, key="id")
+    for i, (spd, hr) in enumerate([(1.72, 128), (1.70, 131), (1.74, 127), (1.69, 133)]):
+        day = today - timedelta(days=60 - i * 14)
+        db.upsert(conn, "activities", {
+            "id": f"garmin:ruck{i}", "source": "garmin", "garmin_id": f"ruck{i}", "strava_id": None, "name": "Ruck 20kg",
+            "sport": "ruck", "start_time": f"{day.isoformat()}T06:40:00", "date": day.isoformat(),
+            "duration_s": 78 * 60, "moving_s": 76 * 60, "distance_m": round(spd * 76 * 60), "elevation_m": 130,
+            "avg_hr": hr, "max_hr": hr + 18, "avg_speed": spd, "calories": 650, "aerobic_te": 2.8, "anaerobic_te": 0.2,
+        }, key="id")
     conn.commit()

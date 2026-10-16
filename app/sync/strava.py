@@ -68,7 +68,7 @@ def to_row(a: dict) -> dict:
         "source": "strava",
         "strava_id": str(a["id"]),
         "name": a.get("name"),
-        "sport": normalise_sport(a.get("sport_type") or a.get("type")),
+        "sport": normalise_sport(a.get("sport_type") or a.get("type"), a.get("name")),
         "start_time": start.isoformat(),
         "date": start.date().isoformat(),
         "duration_s": num(a.get("elapsed_time")),
