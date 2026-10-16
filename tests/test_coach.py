@@ -24,7 +24,9 @@ def test_explain_activity_finds_ruck_and_context(conn):
     assert out["session"]["sport"] == "ruck"
     comp = out["comparable_sessions_last_90d"]
     assert comp["n_sessions"] == 4 and comp["efficiency_vs_usual_pct"] < -10   # slower at a higher HR
-    assert any(a["sport"] == "multisport" for a in out["biggest_sessions_prior_14_days"])
+    ev = out["multisport_events_prior_21_days"]
+    assert len(ev) == 1 and ev[0]["kind"] == "Triathlon" and ev[0]["sports"] == ["swim", "ride", "run"]
+    assert ev[0]["load"] > 300 and ev[0]["total_min"] == 153
     assert out["recovery_last_4_mornings"] and out["personal_baselines_60d"]["hrv"]
 
 
@@ -120,3 +122,36 @@ def test_strava_tri_legs_fold_into_garmin_multisport(tmp_path):
     strava.store_activity(c, {"id": 200, "name": "Tri Run", "sport_type": "Run",
                               "start_date_local": "2026-06-07T08:46:00Z", "elapsed_time": 2600})
     assert c.execute("SELECT COUNT(*) FROM activities").fetchone()[0] == 1
+
+
+def test_group_events():
+    from app.analytics import group_events
+    def a(i, sport, t, mins, day="2026-06-07"):
+        return {"id": str(i), "sport": sport, "date": day, "start_time": f"{day}T{t}", "duration_s": mins * 60, "load": 10}
+    acts = [a(1, "swim", "07:00:00", 30), a(2, "ride", "07:33:00", 70), a(3, "run", "08:50:00", 45),   # tri
+            a(4, "ride", "07:00:00", 90, "2026-06-08"), a(5, "run", "08:35:00", 20, "2026-06-08"),       # brick
+            a(6, "run", "07:00:00", 40, "2026-06-09"), a(7, "ride", "18:00:00", 60, "2026-06-09"),       # separate
+            a(8, "strength", "08:00:00", 30, "2026-06-07")]
+    ev = group_events(acts)
+    assert [e["kind"] for e in ev] == ["Triathlon", "Brick"]
+    assert ev[0]["legs"] == ["1", "2", "3"] and ev[0]["load"] == 30 and ev[0]["total_min"] == 155
+    assert acts[0]["event"] == "Triathlon" and "event" not in acts[5] and "event" not in acts[7]
+
+
+def test_unworn_watch_night_is_not_zero_sleep():
+    class G:
+        def get_sleep_data(self, d): return {"dailySleepDTO": {"sleepTimeSeconds": 0, "sleepStartTimestampLocal": None,
+                                                               "sleepScores": {"overall": {"value": 0}}}}
+        def get_stats(self, d): return {"restingHeartRate": 52, "totalSteps": 4000}
+        def __getattr__(self, n): return lambda *a: None
+    r = garmin.daily_row(G(), "2026-06-02")
+    assert r["sleep_s"] is None and r["sleep_score"] is None and r["bedtime"] is None and r["resting_hr"] == 52
+
+
+def test_manual_sleep_fills_unworn_nights():
+    from app.analytics import merge_days
+    d1, d2 = date(2026, 6, 1), date(2026, 6, 2)
+    rows = merge_days([{"date": "2026-06-01", "sleep_s": 27000, "bedtime": "23:00", "wake_time": "06:30"}],
+                      [{"date": "2026-06-02", "bedtime": "23:30", "wake_time": "07:00", "drinks": 1}], d1, d2)
+    assert rows[0]["sleep_source"] == "watch" and rows[1]["sleep_source"] == "manual log"
+    assert rows[1]["sleep_s"] == 7.5 * 3600

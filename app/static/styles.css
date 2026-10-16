@@ -160,6 +160,8 @@ th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid
 th { color: var(--text-muted); font-weight: 550; font-size: 12px; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 #activities tbody tr:nth-child(n+51) { display: none; }
+.tag { margin-left: 6px; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 999px;
+  background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); }
 .worse { color: var(--critical); font-weight: 600; }
 .better { color: var(--good); font-weight: 600; }
 

@@ -101,21 +101,30 @@ def seed(conn: sqlite3.Connection, days: int = 180, today: date | None = None, r
             m = round(m) % 1440
             return f"{m // 60:02d}:{m % 60:02d}"
 
-        db.upsert(conn, "daily_metrics", {
-            "date": day.isoformat(), "resting_hr": round(rhr), "hrv": round(hrv),
-            "hrv_baseline_low": 60, "hrv_baseline_high": 80, "hrv_status": "BALANCED",
-            "sleep_s": round(sleep_s), "deep_s": round(sleep_s * 0.17), "rem_s": round(sleep_s * 0.22),
+        # About 1 night in 5 the watch stays on the charger: no sleep/HRV from Garmin, bed/wake logged by hand.
+        worn = days_left <= 4 or random.Random(i * 7919).random() > 0.2
+        sleep_fields = {
+            "hrv": round(hrv), "sleep_s": round(sleep_s), "deep_s": round(sleep_s * 0.17), "rem_s": round(sleep_s * 0.22),
             "light_s": round(sleep_s * 0.55), "awake_s": round(sleep_s * 0.06), "sleep_score": round(score),
-            "bedtime": clock(bed), "wake_time": clock(wake), "steps": round(rnd.gauss(9000, 2500)),
+            "bedtime": clock(bed), "wake_time": clock(wake),
+        }
+        if not worn:
+            sleep_fields = {k: None for k in sleep_fields}
+        db.upsert(conn, "daily_metrics", {
+            "date": day.isoformat(), "resting_hr": round(rhr), **sleep_fields,
+            "hrv_baseline_low": 60, "hrv_baseline_high": 80, "hrv_status": "BALANCED",
+            "steps": round(rnd.gauss(9000, 2500)),
             "stress_avg": round(24 + 2.5 * fatigue + rnd.gauss(0, 4)),
             "body_battery_high": round(max(20, min(100, 95 - 4 * fatigue - 5 * prev_drinks + rnd.gauss(0, 5)))),
             "body_battery_low": round(rnd.uniform(5, 25)), "kcal_burned": round(burned),
             "active_kcal": round(day_load * 9), "vo2max_run": round(52 + 25 * fitness_gain, 1),
             "readiness": None, "updated_at": db.now(),
         })
-        if rnd.random() < 0.85:   # realistic: not every day gets logged
+        if rnd.random() < 0.85 or not worn:   # realistic: not every day gets logged
             db.upsert(conn, "habits", {
-                "date": day.isoformat(), "bedtime": None, "wake_time": None,
+                "date": day.isoformat(),
+                "bedtime": None if worn else clock(bed + rnd.choice([-5, 0, 5, 10])),
+                "wake_time": None if worn else clock(wake + rnd.choice([-5, 0, 5])),
                 "sleep_quality": max(1, min(5, round(score / 20))), "drinks": drinks,
                 "calories": round(intake, -1), "protein_g": round(rnd.gauss(105 if recent else 125, 15)),
                 "carbs_g": round(intake * 0.5 / 4), "fat_g": round(intake * 0.3 / 9),
@@ -126,15 +135,22 @@ def seed(conn: sqlite3.Connection, days: int = 180, today: date | None = None, r
             })
         prev_drinks = drinks
 
-    # A sprint-to-olympic triathlon 9 days ago and a hard-feeling ruck today, so the coach has a story to explain.
+    # An Olympic-distance triathlon 9 days ago and a hard-feeling ruck today, so the coach has a story to explain.
     tri_day = today - timedelta(days=9)
     conn.execute("DELETE FROM activities WHERE date IN (?, ?)", (tri_day.isoformat(), today.isoformat()))
-    db.upsert(conn, "activities", {
-        "id": "garmin:tri", "source": "garmin", "garmin_id": "tri", "strava_id": "9990001", "name": "Olympic Triathlon",
-        "sport": "multisport", "start_time": f"{tri_day.isoformat()}T07:30:00", "date": tri_day.isoformat(),
-        "duration_s": 2 * 3600 + 41 * 60, "moving_s": 2 * 3600 + 38 * 60, "distance_m": 51500, "elevation_m": 310,
-        "avg_hr": 163, "max_hr": 184, "avg_speed": 5.4, "calories": 2150, "aerobic_te": 4.8, "anaerobic_te": 2.9,
-    }, key="id")
+    # Strava-style: each leg is its own activity, with short transitions in between.
+    for leg_id, sport, name, start, mins, dist, hr, spd in [
+        ("1", "swim", "Tri Swim", "07:30:00", 28, 1500, 152, 0.9),
+        ("2", "ride", "Tri Bike", "08:01:00", 72, 40000, 164, 9.3),
+        ("3", "run", "Tri Run", "09:16:00", 47, 10000, 170, 3.55),
+    ]:
+        db.upsert(conn, "activities", {
+            "id": f"strava:tri{leg_id}", "source": "strava", "strava_id": f"tri{leg_id}", "name": name, "sport": sport,
+            "start_time": f"{tri_day.isoformat()}T{start}", "date": tri_day.isoformat(),
+            "duration_s": mins * 60, "moving_s": mins * 60 - 30, "distance_m": dist, "elevation_m": 0 if sport == "swim" else 150,
+            "avg_hr": hr, "max_hr": hr + 14, "avg_speed": spd, "avg_power": 238 if sport == "ride" else None,
+            "suffer_score": {"swim": 40, "ride": 160, "run": 120}[sport],
+        }, key="id")
     db.upsert(conn, "activities", {
         "id": "garmin:ruck", "source": "garmin", "garmin_id": "ruck", "strava_id": "9990002", "name": "Ruck 20kg",
         "sport": "ruck", "start_time": f"{today.isoformat()}T06:40:00", "date": today.isoformat(),

@@ -304,7 +304,7 @@
     d.activities.forEach((a) => {
       const src = [a.garmin_id && "Garmin", a.strava_id && "Strava"].filter(Boolean).join(" + ");
       tb.append(el("tr", {},
-        el("td", { text: fmtDate(a.date) }), el("td", { text: a.name || "" }), el("td", { text: a.sport }),
+        el("td", { text: fmtDate(a.date) }), el("td", {}, a.name || "", a.event ? el("span", { class: "tag", text: a.event }) : null), el("td", { text: a.sport }),
         el("td", { class: "num", text: fmtDur(a.moving_s || a.duration_s) }),
         el("td", { class: "num", text: a.distance_m ? (a.distance_m / 1000).toFixed(1) + " km" : "–" }),
         el("td", { class: "num", text: a.avg_hr ? Math.round(a.avg_hr) : "–" }),
@@ -375,11 +375,16 @@
     $("#sleep-sub").textContent = `Hours per night · target ${S.sleep_target_h} h`;
     chart("c-sleep", {
       type: "bar",
-      data: { labels, datasets: [bars("Sleep (h)", sleepH, css("--series-1"))] },
+      data: { labels, datasets: [
+        bars("Watch", sleepH.map((v, i) => (D[i].sleep_source === "manual log" ? null : v)), css("--series-1"), { stack: "s" }),
+        bars("Logged bed/wake", sleepH.map((v, i) => (D[i].sleep_source === "manual log" ? v : null)), css("--series-2"), { stack: "s" }),
+      ] },
       options: baseOptions({
-        scales: { y: { suggestedMin: 4, suggestedMax: 10 } },
+        scales: { x: { stacked: true }, y: { stacked: true, suggestedMin: 4, suggestedMax: 10 } },
+        interaction: { mode: "nearest", intersect: true },
         plugins: { refs: { lines: [{ y: S.sleep_target_h, label: `target ${S.sleep_target_h} h` }] },
-          tooltip: { callbacks: { label: (c) => `Sleep ${fmtDur(c.parsed.y * 3600)}` } } },
+          legend: { display: true, labels: { boxWidth: 10, boxHeight: 10 } },
+          tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmtDur(c.parsed.y * 3600)}` } } },
       }),
     });
 
@@ -393,7 +398,7 @@
         scales: { y: {
           reverse: true, min: all.length ? Math.floor((Math.min(...all) - 30) / 60) * 60 : 1260,
           max: all.length ? Math.ceil((Math.max(...all) + 30) / 60) * 60 : 1920,
-          ticks: { stepSize: 60, callback: (v) => fmtClock(v) },
+          ticks: { stepSize: 120, maxTicksLimit: 12, callback: (v) => fmtClock(v) },
         } },
         plugins: { tooltip: { callbacks: { label: (c) => { const v = c.raw; return v ? `Bed ${fmtClock(v[0])} → wake ${fmtClock(v[1])} (${fmtDur((v[1] - v[0]) * 60)})` : ""; } } } },
       }),
@@ -461,7 +466,9 @@
       const g = r.garmin || {};
       const ph = { bedtime: g.bedtime, wake_time: g.wake_time, calories: g.kcal_in, protein_g: g.protein_g, carbs_g: g.carbs_g, fat_g: g.fat_g, drinks: g.drinks, water_l: g.water_ml ? (g.water_ml / 1000).toFixed(1) : null };
       Object.entries(ph).forEach(([k, v]) => { if (v != null && f.elements[k].type !== "time") f.elements[k].placeholder = `Garmin: ${v}`; });
-      $("#habit-hint").textContent = g.bedtime ? `Garmin recorded bed ${g.bedtime} → wake ${g.wake_time}. Leave blank to use it.` : (r.manual ? "Saved entry loaded." : "");
+      $("#habit-hint").textContent = g.bedtime
+        ? `Watch recorded bed ${g.bedtime} → wake ${g.wake_time}. Leave blank to use it.`
+        : "No watch sleep for this night. Log bed and wake time and sleep is worked out from them.";
     } catch (e) { toast(e.message); }
   }
 

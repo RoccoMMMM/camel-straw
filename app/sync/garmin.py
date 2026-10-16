@@ -162,6 +162,10 @@ def daily_row(g, day: str) -> dict:
         vo2_ride = find_number(maxm[0].get("cycling") or {}, "vo2MaxPreciseValue", "vo2MaxValue")
 
     kcal_in = find_number(food, "consumedCalories", "caloriesConsumed", "totalCalories") if food else None
+    # Nights you didn't wear the watch come back with an empty or zero-length sleep record: store nothing
+    # for them, so they don't read as "0 h sleep" and your manual log fills the gap.
+    if not (num(dto.get("sleepTimeSeconds")) or 0) > 0:
+        dto, scores = {}, {}
     return {
         "date": day,
         "resting_hr": num(stats.get("restingHeartRate")) or num(sleep.get("restingHeartRate")),

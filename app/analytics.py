@@ -172,6 +172,60 @@ def efficiency_series(activities: list[dict], settings: dict) -> list[dict]:
     return out
 
 
+# ---- multisport events ------------------------------------------------------
+
+MULTISPORT_LEGS = {"swim", "ride", "run"}
+MAX_TRANSITION_S = 20 * 60
+
+
+def group_events(activities: list[dict]) -> list[dict]:
+    """Find triathlons/duathlons/bricks recorded as separate activities (how Strava stores them).
+
+    Back-to-back swim/ride/run activities on the same day, each starting within 20 minutes of the
+    previous one ending, form one event. Each leg gets `event_id`/`event` set; the list of events is
+    returned. Garmin's own multisport records are already a single activity and are left alone.
+    """
+    acts = sorted((a for a in activities if a.get("sport") in MULTISPORT_LEGS and a.get("start_time")),
+                  key=lambda a: a["start_time"])
+    events, chain = [], []
+
+    def close():
+        sports = [a["sport"] for a in chain]
+        if len(chain) >= 2 and len(set(sports)) >= 2:
+            kind = ("Triathlon" if sports[:3] == ["swim", "ride", "run"] or set(sports) == MULTISPORT_LEGS
+                    else "Duathlon" if sports[0] == "run" and "ride" in sports
+                    else "Brick" if sports == ["ride", "run"] else "Multisport")
+            start = chain[0]["start_time"]
+            end_s = _end_ts(chain[-1])
+            ev = {"event_id": f"event:{chain[0]['id']}", "kind": kind, "date": chain[0]["date"], "start_time": start,
+                  "legs": [a["id"] for a in chain], "sports": sports,
+                  "total_min": round((end_s - _ts(start)) / 60),
+                  "moving_min": round(sum((a.get("moving_s") or a.get("duration_s") or 0) for a in chain) / 60),
+                  "distance_km": round(sum(a.get("distance_m") or 0 for a in chain) / 1000, 1),
+                  "load": round(sum(a.get("load") or 0 for a in chain), 1)}
+            for a in chain:
+                a["event_id"], a["event"] = ev["event_id"], kind
+            events.append(ev)
+
+    for a in acts:
+        if chain and (a["date"] != chain[-1]["date"] or _ts(a["start_time"]) - _end_ts(chain[-1]) > MAX_TRANSITION_S
+                      or _ts(a["start_time"]) < _ts(chain[-1]["start_time"])):
+            close()
+            chain = []
+        chain.append(a)
+    close()
+    return events
+
+
+def _ts(iso: str) -> float:
+    from datetime import datetime
+    return datetime.fromisoformat(iso[:19]).timestamp()
+
+
+def _end_ts(a: dict) -> float:
+    return _ts(a["start_time"]) + (a.get("duration_s") or a.get("moving_s") or 0)
+
+
 # ---- wellness / habits -------------------------------------------------------
 
 MERGE_FIELDS = {
@@ -187,7 +241,10 @@ MERGE_FIELDS = {
 
 
 def merge_days(wellness: list[dict], habits: list[dict], start: date, end: date) -> list[dict]:
-    """One row per day: Garmin wellness + manual habits (manual entries win)."""
+    """One row per day: Garmin wellness + manual habits.
+
+    Where both have a value (bed/wake time, drinks, food), the manual entry wins. Garmin fills
+    everything you didn't log; on nights without the watch, sleep comes from your logged bed/wake times."""
     w = {r["date"]: r for r in wellness}
     h = {r["date"]: r for r in habits}
     out = []
@@ -213,6 +270,7 @@ def merge_days(wellness: list[dict], habits: list[dict], start: date, end: date)
             if b is not None and 0 < wk - b < 16 * 60:
                 row["sleep_s"] = (wk - b) * 60
                 row["sleep_estimated"] = True
+        row["sleep_source"] = ("watch" if wr.get("sleep_s") else "manual log" if row.get("sleep_estimated") else None)
         row["bed_min"] = clock_to_minutes(row["bedtime"], bedtime=True)
         row["wake_min"] = clock_to_minutes(row["wake_time"])
         out.append(row)
@@ -273,10 +331,12 @@ def load_context(conn: sqlite3.Connection, settings: dict, today: date | None = 
         a.pop("raw", None)
         a["load"] = round(activity_load(a, settings), 1)
         a["intensity"] = intensity_class(a, settings)
+    events = group_events(acts)
     return {
         "today": today,
         "settings": settings,
         "activities": acts,
+        "events": events,
         "recent_activities": [a for a in acts if d(a["date"]) >= start],
         "load": load_series(acts, settings, start, today),
         "days": merge_days(wellness, habits, start, today),

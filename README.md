@@ -98,10 +98,12 @@ it also pulls **food, hydration and alcohol**.
 A workout recorded on your Garmin **and** uploaded to Strava is matched by start time and duration and
 **counted once**. The richer Garmin record is kept, and Strava's relative effort is attached to it.
 
-**Triathlons and rucks:** a Garmin multisport activity counts once. If Garmin also lists the separate swim, bike
-and run legs, the legs are kept and the multisport total is dropped. If Strava has the legs as separate activities,
-they're folded into the Garmin race. Neither Garmin nor Strava has a rucking sport type, so any activity with
-"ruck" in its name is treated as a ruck.
+**Triathlons and rucks:** Strava saves each triathlon leg as its own activity. The app groups back-to-back swim,
+bike and run activities (each starting within 20 minutes of the last one ending) into one **Triathlon**, **Duathlon**
+or **Brick** event. The event is tagged in the activity list and the coach treats it as one race effort. A Garmin
+multisport activity counts once. If Garmin also lists the separate legs, the legs are kept and the multisport total
+is dropped. If Strava has the legs too, they're folded into the Garmin race. Neither Garmin nor Strava has a
+rucking sport type, so any activity with "ruck" in its name is treated as a ruck.
 
 ### Syncing
 
@@ -115,6 +117,10 @@ they're folded into the Garmin race. Neither Garmin nor Strava has a rucking spo
 Each day's entry holds **last night's** sleep (bedtime, wake time and quality) plus **that day's** food
 and drinks. Garmin keys sleep the same way. Leave a field blank to use whatever Garmin recorded.
 Anything you type overrides Garmin.
+
+**Nights without the watch:** Garmin stores nothing for those nights, so they never show up as 0 hours of sleep.
+Log your bed and wake time and the app works out the sleep from them. The sleep chart shows watch nights and logged
+nights in different colours, and the coach knows logged nights have no HRV or sleep score.
 
 ## How the numbers work
 

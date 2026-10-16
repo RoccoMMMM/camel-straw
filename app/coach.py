@@ -38,6 +38,8 @@ How to work:
   the bedtime on today's entry, if they woke up today.
 - Be direct and specific, like a good coach texting an athlete. Use short paragraphs or brief bullet lists. \
   Use the athlete's units (km, bpm, ms, hours).
+- Triathlons and bricks: Strava stores each leg as its own activity. The data tools group back-to-back   swim/bike/run legs into one event (`part_of_event`, `multisport_events`) and sum their load. Treat an event as   one race effort when judging fatigue. If the grouping looks wrong (e.g. names or timings suggest separate   sessions, or a race leg was missed), say so and reason from the individual activities.
+- Sleep data: `sleep_source` is "watch" when Garmin recorded the night and "manual log" when it was worked out   from logged bed/wake times (the athlete doesn't always wear the watch). Watch nights also have HRV and a sleep   score; manual nights don't. Don't read missing HRV on a manual night as a problem.
 - Correlation in a single person's data is suggestive, not proof. Say so when it matters.
 - You're not a doctor. If they mention chest pain, fainting, palpitations at rest, or an injury that is getting \
   worse, tell them to see a medical professional."""
@@ -84,10 +86,11 @@ def _activity_summary(a: dict) -> dict:
         "elevation_m": a.get("elevation_m"), "load": a.get("load"), "intensity": a.get("intensity"),
         "aerobic_te": a.get("aerobic_te"), "anaerobic_te": a.get("anaerobic_te"),
         "strava_relative_effort": a.get("suffer_score"),
+        **({"part_of_event": a["event"], "event_id": a["event_id"]} if a.get("event") else {}),
     }
 
 
-DAY_FIELDS = ["date", "sleep_h", "sleep_score", "bedtime", "wake_time", "hrv", "hrv_baseline_low", "hrv_baseline_high",
+DAY_FIELDS = ["date", "sleep_h", "sleep_source", "sleep_score", "bedtime", "wake_time", "hrv", "hrv_baseline_low", "hrv_baseline_high",
               "resting_hr", "stress_avg", "body_battery_high", "readiness", "steps", "drinks", "calories", "kcal_burned",
               "protein_g", "carbs_g", "fat_g", "water_l", "caffeine_mg", "sleep_quality", "energy", "soreness", "notes"]
 
@@ -120,8 +123,10 @@ def tool_get_activities(conn, args) -> dict:
     sport = (args.get("sport") or "").lower() or None
     acts = [a for a in ctx["activities"] if start.isoformat() <= a["date"] <= end.isoformat()
             and (sport is None or a.get("sport") == sport)]
+    events = [e for e in ctx["events"] if start.isoformat() <= e["date"] <= end.isoformat()]
     return {"start_date": start.isoformat(), "end_date": end.isoformat(), "count": len(acts),
-            "activities": [_activity_summary(a) for a in acts]}
+            "activities": [_activity_summary(a) for a in acts],
+            "multisport_events": events}
 
 
 def tool_get_daily_metrics(conn, args) -> dict:
@@ -216,6 +221,9 @@ def tool_explain_activity(conn, args) -> dict:
         "avg_weekly_load_prior_4_weeks": round(sum(r["load"] for r in ctx["load"]
                                                     if tday - timedelta(days=35) <= analytics.d(r["date"]) < tday - timedelta(days=7)) / 4),
         "biggest_sessions_prior_14_days": [_activity_summary(a) for a in biggest],
+        "multisport_events_prior_21_days": [e for e in ctx["events"]
+                                            if tday - timedelta(days=21) <= analytics.d(e["date"]) < tday],
+        "this_session_event": next((e for e in ctx["events"] if e["event_id"] == target.get("event_id")), None),
         "recovery_last_4_mornings": [_day_summary(days[(tday - timedelta(days=i)).isoformat()])
                                      for i in range(3, -1, -1) if (tday - timedelta(days=i)).isoformat() in days],
         "personal_baselines_60d": {"hrv": baseline("hrv"), "resting_hr": baseline("resting_hr"),
