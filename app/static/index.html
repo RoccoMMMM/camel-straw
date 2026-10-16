@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Training Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/vendor/chart-4.4.1.umd.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Training Dashboard</div>
+  <nav class="tabs" role="tablist">
+    <a href="#overview" data-tab="overview">Overview</a>
+    <a href="#training" data-tab="training">Training</a>
+    <a href="#recovery" data-tab="recovery">Recovery &amp; Sleep</a>
+    <a href="#habits" data-tab="habits">Habits</a>
+    <a href="#settings" data-tab="settings">Settings</a>
+  </nav>
+  <div class="controls">
+    <label class="sr-only" for="range">Date range</label>
+    <select id="range">
+      <option value="30">Last 30 days</option>
+      <option value="90" selected>Last 90 days</option>
+      <option value="180">Last 6 months</option>
+      <option value="365">Last 12 months</option>
+    </select>
+    <button id="sync-btn" class="btn">Sync now</button>
+    <button id="theme-btn" class="btn ghost" aria-label="Toggle light or dark theme">Dark mode</button>
+  </div>
+</header>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<main>
+  <!-- OVERVIEW -->
+  <section id="tab-overview" class="tab">
+    <div class="hero">
+      <div class="readiness card">
+        <div class="eyebrow">Today</div>
+        <div class="readiness-score"><span id="ready-score">–</span><small>/100</small></div>
+        <div id="ready-label" class="readiness-label"></div>
+        <div class="meter"><div id="ready-bar"></div></div>
+      </div>
+      <div class="tiles" id="tiles"></div>
+    </div>
+    <div class="grid two">
+      <div class="card">
+        <h2>What needs attention</h2>
+        <ul id="findings" class="findings"></ul>
+      </div>
+      <div class="card">
+        <h2>Fitness &amp; fatigue</h2>
+        <p class="sub">Fitness = 42-day training load, fatigue = 7-day load</p>
+        <div class="chart"><canvas id="c-fitness-overview"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRAINING -->
+  <section id="tab-training" class="tab">
+    <div class="grid two">
+      <div class="card">
+        <h2>Fitness &amp; fatigue</h2>
+        <p class="sub">Daily training load rolled into fitness (42-day) and fatigue (7-day)</p>
+        <div class="chart"><canvas id="c-fitness"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Form</h2>
+        <p class="sub">Fitness − fatigue. Shaded: −10 to −30 productive training · below −30 high risk</p>
+        <div class="chart"><canvas id="c-form"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Weekly volume</h2>
+        <p class="sub">Hours per week by sport</p>
+        <div class="chart"><canvas id="c-weekly"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Aerobic efficiency</h2>
+        <p class="sub" id="ef-sub">Easy &amp; steady sessions: output per heartbeat. Up = fitter.</p>
+        <div class="seg" id="ef-sport">
+          <button data-v="run" class="on">Running</button><button data-v="ride">Cycling</button>
+        </div>
+        <div class="chart"><canvas id="c-ef"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>VO₂ max</h2>
+        <p class="sub">Garmin estimate</p>
+        <div class="chart small"><canvas id="c-vo2"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Intensity mix</h2>
+        <p class="sub">Share of endurance time by average heart rate, selected range</p>
+        <div id="intensity" class="intensity"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Activities</h2>
+      <div class="table-wrap"><table id="activities"><thead><tr>
+        <th>Date</th><th>Name</th><th>Sport</th><th class="num">Time</th><th class="num">Distance</th>
+        <th class="num">Avg HR</th><th class="num">Load</th><th>Intensity</th><th>Source</th>
+      </tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- RECOVERY -->
+  <section id="tab-recovery" class="tab">
+    <div class="grid two">
+      <div class="card">
+        <h2>Heart-rate variability</h2>
+        <p class="sub">Overnight average (ms). Higher = better recovered. Band = Garmin baseline</p>
+        <div class="chart"><canvas id="c-hrv"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Resting heart rate</h2>
+        <p class="sub">bpm. A rise of 4+ above your normal is an early warning</p>
+        <div class="chart"><canvas id="c-rhr"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Sleep duration</h2>
+        <p class="sub" id="sleep-sub">Hours per night vs target</p>
+        <div class="chart"><canvas id="c-sleep"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Bed &amp; wake times</h2>
+        <p class="sub">Each bar is one night, from bedtime to wake time</p>
+        <div class="chart"><canvas id="c-schedule"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Sleep score</h2>
+        <div class="chart small"><canvas id="c-sleepscore"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>All-day stress &amp; Body Battery</h2>
+        <p class="sub">Body Battery peak (morning charge)</p>
+        <div class="chart small"><canvas id="c-bb"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HABITS -->
+  <section id="tab-habits" class="tab">
+    <div class="grid two">
+      <div class="card">
+        <h2>Daily log</h2>
+        <p class="sub">Last night's sleep + today's food and drinks. Leave blank anything Garmin already tracks.</p>
+        <form id="habit-form" class="form">
+          <label class="wide">Date <input type="date" name="date" required></label>
+          <fieldset><legend>Last night</legend>
+            <label>Bedtime <input type="time" name="bedtime"></label>
+            <label>Wake time <input type="time" name="wake_time"></label>
+            <label>Sleep quality (1–5) <input type="number" name="sleep_quality" min="1" max="5"></label>
+          </fieldset>
+          <fieldset><legend>Today</legend>
+            <label>Alcoholic drinks <input type="number" name="drinks" min="0" step="0.5"></label>
+            <label>Calories <input type="number" name="calories" min="0"></label>
+            <label>Protein (g) <input type="number" name="protein_g" min="0"></label>
+            <label>Carbs (g) <input type="number" name="carbs_g" min="0"></label>
+            <label>Fat (g) <input type="number" name="fat_g" min="0"></label>
+            <label>Water (L) <input type="number" name="water_l" min="0" step="0.1"></label>
+            <label>Caffeine (mg) <input type="number" name="caffeine_mg" min="0"></label>
+            <label>Energy (1–5) <input type="number" name="energy" min="1" max="5"></label>
+            <label>Soreness (1–5) <input type="number" name="soreness" min="1" max="5"></label>
+          </fieldset>
+          <label class="wide">Notes <textarea name="notes" rows="2" maxlength="2000"></textarea></label>
+          <div class="row"><button class="btn" type="submit">Save</button>
+            <button class="btn ghost" type="button" id="habit-clear">Delete entry</button>
+            <span id="habit-hint" class="muted"></span></div>
+        </form>
+      </div>
+      <div class="card">
+        <h2>How your habits affect recovery</h2>
+        <p class="sub">Your own data: average on nights with vs without each habit</p>
+        <div class="table-wrap"><table id="correlations"><thead><tr>
+          <th>Habit</th><th>Metric</th><th class="num">With</th><th class="num">Without</th><th class="num">Effect</th><th class="num">Nights</th>
+        </tr></thead><tbody></tbody></table></div>
+        <p class="muted small-print">Needs at least 3 nights each way. Correlation, not proof — but a consistent gap is worth acting on.</p>
+      </div>
+      <div class="card">
+        <h2>Alcohol</h2>
+        <p class="sub" id="drinks-sub">Drinks per day</p>
+        <div class="chart small"><canvas id="c-drinks"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Energy balance</h2>
+        <p class="sub">Calories eaten vs burned (Garmin)</p>
+        <div class="chart small"><canvas id="c-kcal"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Protein</h2>
+        <p class="sub" id="protein-sub">Grams per day vs target</p>
+        <div class="chart small"><canvas id="c-protein"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Hydration</h2>
+        <p class="sub">Water (L) per day</p>
+        <div class="chart small"><canvas id="c-water"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="tab-settings" class="tab">
+    <div class="grid two">
+      <div class="card">
+        <h2>Garmin Connect</h2>
+        <p id="garmin-status" class="status-line"></p>
+        <form id="garmin-form" class="form">
+          <label class="wide">Email <input type="email" name="email" autocomplete="username" required></label>
+          <label class="wide">Password <input type="password" name="password" autocomplete="current-password" required></label>
+          <div class="row"><button class="btn" type="submit">Connect Garmin</button></div>
+          <p class="muted small-print">Your password is sent to Garmin once to obtain tokens; only the tokens are stored, on this computer.</p>
+        </form>
+        <form id="garmin-mfa" class="form" hidden>
+          <label class="wide">Code from Garmin email/app <input name="code" inputmode="numeric" autocomplete="one-time-code" required></label>
+          <div class="row"><button class="btn" type="submit">Verify</button></div>
+        </form>
+        <div class="row"><button class="btn ghost" id="garmin-disconnect" hidden>Disconnect Garmin</button></div>
+      </div>
+      <div class="card">
+        <h2>Strava</h2>
+        <p id="strava-status" class="status-line"></p>
+        <div class="row">
+          <a class="btn" id="strava-connect" href="/auth/strava/login">Connect Strava</a>
+          <button class="btn ghost" id="strava-disconnect" hidden>Disconnect Strava</button>
+        </div>
+        <p class="muted small-print">Workouts recorded on Garmin and also uploaded to Strava are matched and counted once.</p>
+      </div>
+      <div class="card">
+        <h2>Athlete profile</h2>
+        <p class="sub">Used for training load, intensity zones and nutrition targets</p>
+        <form id="settings-form" class="form">
+          <label>Max heart rate <input type="number" name="max_hr" min="120" max="230" required></label>
+          <label>Resting heart rate <input type="number" name="resting_hr" min="25" max="110" required></label>
+          <label>Sex (for load formula) <select name="sex"><option value="male">Male</option><option value="female">Female</option></select></label>
+          <label>Weight (kg) <input type="number" name="weight_kg" step="0.1" min="30" max="250" required></label>
+          <label>Sleep target (h) <input type="number" name="sleep_target_h" step="0.25" min="5" max="11" required></label>
+          <label>Protein target (g/kg) <input type="number" name="protein_target_g_per_kg" step="0.1" min="0.5" max="3.5" required></label>
+          <label>Weekly drink limit <input type="number" name="weekly_drink_limit" step="1" min="0" max="50" required></label>
+          <div class="row"><button class="btn" type="submit">Save profile</button></div>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Sync</h2>
+        <p id="counts" class="status-line"></p>
+        <div class="row">
+          <button class="btn ghost" data-sync="garmin">Sync Garmin</button>
+          <button class="btn ghost" data-sync="strava">Sync Strava</button>
+          <button class="btn ghost" data-sync="all" data-days="365">Backfill 1 year</button>
+        </div>
+        <ul id="sync-log" class="log"></ul>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
