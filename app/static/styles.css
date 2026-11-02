@@ -76,6 +76,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 [hidden] { display: none !important; }
+.tabs .short { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
 .topbar {
@@ -234,11 +235,35 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .grid.two { grid-template-columns: minmax(0, 1fr); }
   .hero { grid-template-columns: minmax(0, 1fr); }
 }
+/* Login */
+.login-body { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.login { width: min(360px, 100%); display: grid; gap: 12px; justify-items: start; }
+.login h1 { font-size: 18px; margin: 0; }
+.login label { display: grid; gap: 4px; width: 100%; font-size: 13px; color: var(--text-secondary); }
+.login-error { color: var(--critical); margin: 0; min-height: 1em; font-size: 13px; }
+
 @media (max-width: 600px) {
-  .topbar { padding: 10px 16px; gap: 8px; }
-  .brand { flex-basis: 100%; }
-  .tabs { flex-basis: 100%; order: 3; flex-wrap: nowrap; overflow-x: auto; }
-  .tabs a { white-space: nowrap; }
+  /* Phone: app-style layout with tabs in a bottom bar. */
+  .topbar { padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); gap: 8px; flex-wrap: nowrap; }
+  .brand { flex: 1; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .controls { gap: 6px; }
+  .controls select { max-width: 120px; }
+  .controls .btn { padding: 6px 10px; }
+  #theme-btn { display: none; }
+  .tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; order: 3;
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 0;
+    background: var(--surface-1); border-top: 1px solid var(--border);
+    padding: 4px 4px max(6px, env(safe-area-inset-bottom));
+  }
+  .tabs a { text-align: center; font-size: 11px; padding: 8px 2px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tabs a.on { background: transparent; color: var(--accent); font-weight: 650; }
+  main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .coach-main { min-height: calc(100vh - 220px); min-height: calc(100dvh - 220px); }
+  .chat-form { position: sticky; bottom: 0; }
+  #toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .tabs .long { display: none; }
+  .tabs .short { display: inline; }
   main { padding: 16px 16px 40px; }
   .chart { height: 220px; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }

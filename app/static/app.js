@@ -12,6 +12,7 @@
       headers: { "Content-Type": "application/json" }, ...opts,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
+    if (res.status === 401) { location.href = "/login"; throw new Error("Not signed in"); }
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.detail ? (typeof json.detail === "string" ? json.detail : JSON.stringify(json.detail)) : res.statusText);
     return json;
@@ -164,7 +165,9 @@
       state.data = await api(`/api/dashboard?days=${state.range}`);
       render();
     } catch (e) {
-      toast("Could not load dashboard: " + e.message);
+      toast(navigator.onLine === false || e instanceof TypeError
+        ? "Can't reach your computer. Check it's on, awake and running the dashboard."
+        : "Could not load dashboard: " + e.message);
     } finally {
       document.querySelector("main").classList.remove("loading");
     }
@@ -591,6 +594,10 @@
         : s.strava.connected ? `✓ Connected${s.strava.athlete ? " as " + s.strava.athlete : ""}` : "Not connected";
       $("#strava-connect").hidden = !s.strava.configured || s.strava.connected;
       $("#strava-disconnect").hidden = !s.strava.connected;
+      $("#sign-out").hidden = !s.passcode_enabled;
+      $("#phone-status").textContent = s.passcode_enabled
+        ? "✓ Passcode protection is on."
+        : "Phone access is off. Set APP_PASSCODE in .env and start with: python -m app.cli serve --phone";
       $("#counts").textContent = `${s.counts.activities} activities · ${s.counts.wellness_days} days of wellness data · ${s.counts.habit_days} habit entries` +
         (s.auto_sync_hours ? ` · auto-sync every ${s.auto_sync_hours} h` : "");
       const log = $("#sync-log"); log.replaceChildren();
@@ -708,6 +715,9 @@
   try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
   const today = new Date(); today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
   $("#habit-form [name=date]").value = today.toISOString().slice(0, 10);
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }
   bind();
   themeLabel();
   showTab();

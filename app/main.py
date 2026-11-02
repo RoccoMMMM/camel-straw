@@ -10,12 +10,12 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analytics, coach, config, db, diagnostics
+from . import analytics, auth, coach, config, db, diagnostics
 from .sync import garmin, runner, strava
 
 STATIC = Path(__file__).parent / "static"
@@ -36,12 +36,48 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Fitness Dashboard", lifespan=lifespan)
+app.middleware("http")(auth.middleware)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 @app.get("/", include_in_schema=False)
 def index():
     return FileResponse(STATIC / "index.html")
+
+
+# ---- phone app (installable web app) + passcode login ------------------------
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def manifest():
+    return FileResponse(STATIC / "manifest.webmanifest", media_type="application/manifest+json")
+
+
+@app.get("/sw.js", include_in_schema=False)
+def service_worker():
+    # Served from the root so it can control the whole app.
+    return FileResponse(STATIC / "sw.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(STATIC / "icons" / "icon-192.png", media_type="image/png")
+
+
+@app.get("/login", include_in_schema=False)
+def login_form(request: Request):
+    if auth.passcode() is None or auth.is_authenticated(request):
+        return RedirectResponse("/", status_code=303)
+    return auth.login_page()
+
+
+@app.post("/login", include_in_schema=False)
+async def login_submit(request: Request):
+    return await auth.login(request)
+
+
+@app.get("/logout", include_in_schema=False)
+def logout():
+    return auth.logout()
 
 
 # ---- dashboard ---------------------------------------------------------------
@@ -187,6 +223,7 @@ def status() -> dict[str, Any]:
         "strava": {"configured": strava.configured(), "connected": bool(tok),
                    "athlete": " ".join(filter(None, [athlete.get("firstname"), athlete.get("lastname")])) or None},
         "auto_sync_hours": config.AUTO_SYNC_HOURS,
+        "passcode_enabled": auth.passcode() is not None,
         "coach": {"configured": coach_configured(), "model": coach.MODEL},
         "counts": {
             "activities": conn.execute("SELECT COUNT(*) FROM activities").fetchone()[0],

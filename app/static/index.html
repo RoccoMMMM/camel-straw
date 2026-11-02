@@ -2,8 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Training Dashboard</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Training">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1a1a19" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/vendor/chart-4.4.1.umd.js"></script>
 </head>
@@ -14,7 +23,7 @@
     <a href="#overview" data-tab="overview">Overview</a>
     <a href="#coach" data-tab="coach">Coach</a>
     <a href="#training" data-tab="training">Training</a>
-    <a href="#recovery" data-tab="recovery">Recovery &amp; Sleep</a>
+    <a href="#recovery" data-tab="recovery"><span class="long">Recovery &amp; Sleep</span><span class="short">Recovery</span></a>
     <a href="#habits" data-tab="habits">Habits</a>
     <a href="#settings" data-tab="settings">Settings</a>
   </nav>
@@ -284,6 +293,12 @@
           <button class="btn ghost" data-sync="all" data-days="365">Backfill 1 year</button>
         </div>
         <ul id="sync-log" class="log"></ul>
+      </div>
+      <div class="card">
+        <h2>Use on your phone</h2>
+        <p class="sub">Open this dashboard on your phone, then add it to your home screen: in Safari tap Share → <strong>Add to Home Screen</strong>; in Chrome tap ⋮ → <strong>Add to Home screen</strong>. See README → "Phone app" for connecting your phone.</p>
+        <p id="phone-status" class="status-line"></p>
+        <div class="row"><a class="btn ghost" id="sign-out" href="/logout" hidden>Sign out</a></div>
       </div>
     </div>
   </section>

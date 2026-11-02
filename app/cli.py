@@ -1,6 +1,7 @@
 """Command line helpers.
 
   python -m app.cli serve [--demo] [--port 8000]   run the dashboard
+  python -m app.cli serve --phone                  ...and let your phone connect (needs APP_PASSCODE)
   python -m app.cli garmin-login                   log in to Garmin once (handles MFA), saves tokens
   python -m app.cli sync [--provider all] [--days N]
   python -m app.cli demo                           (re)generate data/demo.db with synthetic data
@@ -26,6 +27,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--demo", action="store_true", help="use data/demo.db (generated if missing)")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)
+    s.add_argument("--phone", action="store_true",
+                   help="let your phone connect (listens on your network; requires APP_PASSCODE in .env)")
     sub.add_parser("garmin-login")
     y = sub.add_parser("sync")
     y.add_argument("--provider", default="all", choices=["all", "garmin", "strava"])
@@ -50,8 +53,21 @@ def main(argv: list[str] | None = None) -> int:
             os.environ["AUTO_SYNC_HOURS"] = "0"
             config.AUTO_SYNC_HOURS = 0
         import uvicorn
-        print(f"Dashboard: http://{args.host}:{args.port}")
-        uvicorn.run("app.main:app", host=args.host, port=args.port)
+        if args.phone:
+            if not os.getenv("APP_PASSCODE"):
+                print("To use the dashboard from your phone, first set a passcode: add a line like\n"
+                      "  APP_PASSCODE=pick-something-long\n"
+                      "to your .env file (nano .env), then run this command again.")
+                return 1
+            args.host = "0.0.0.0"
+            print(f"Dashboard on this computer: http://localhost:{args.port}")
+            ip = _lan_ip()
+            if ip:
+                print(f"On your phone (same Wi-Fi):  http://{ip}:{args.port}")
+            print("Tailscale users: use this computer's Tailscale name or IP instead (see README → Phone app).")
+        else:
+            print(f"Dashboard: http://{args.host}:{args.port}")
+        uvicorn.run("app.main:app", host=args.host, port=args.port, proxy_headers=True)
         return 0
 
     if args.cmd == "garmin-login":
@@ -73,6 +89,17 @@ def main(argv: list[str] | None = None) -> int:
             ok &= r["ok"]
         return 0 if ok else 1
     return 1
+
+
+def _lan_ip() -> str | None:
+    """This computer's address on the local network (no traffic is sent)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("192.0.2.1", 9))
+            return sock.getsockname()[0]
+    except OSError:
+        return None
 
 
 if __name__ == "__main__":

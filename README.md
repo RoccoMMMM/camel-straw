@@ -126,6 +126,47 @@ Anything you type overrides Garmin.
 Log your bed and wake time and the app works out the sleep from them. The sleep chart shows watch nights and logged
 nights in different colours, and the coach knows logged nights have no HRV or sleep score.
 
+## Phone app
+
+The dashboard installs on your phone like an app: it gets a home-screen icon, opens full screen, and puts the tabs in a
+bottom bar. It still runs on your computer, so the computer has to be on, awake and running the dashboard.
+
+**1. Set a passcode.** Anyone who can reach the dashboard could see your data, so phone access needs one.
+Add a line to `.env` (`nano .env`):
+
+```
+APP_PASSCODE=something-long-only-you-know
+```
+
+**2. Start the dashboard in phone mode** (instead of plain `serve`):
+
+```bash
+python -m app.cli serve --phone
+```
+
+It prints the address to open on your phone.
+
+**3. Connect your phone.** Pick one:
+
+- **Same Wi-Fi (simplest).** Open the printed `http://192.168.…:8000` address on your phone. It only works while
+  your phone is on the same network as your computer.
+- **Anywhere, with Tailscale (recommended).** [Tailscale](https://tailscale.com) is a free app that links your own
+  devices privately, so nothing is exposed to the internet. Install it on your Mac and your phone, and sign in to the
+  same account on both. Then open `http://<your-mac's-tailscale-name>:8000` on your phone; Tailscale shows the
+  name. For the offline-friendly app experience, run `tailscale serve --bg 8000` on the Mac and use the
+  `https://…ts.net` address it prints instead.
+
+**4. Add it to your home screen.** Sign in with your passcode, then in Safari tap **Share → Add to Home Screen**
+(Chrome on Android: **⋮ → Add to Home screen**).
+
+Notes:
+
+- Connect Strava from the computer itself, at http://localhost:8000. Strava's sign-in sends you back to `localhost`,
+  which on your phone means the phone, not your Mac. After that, syncing works from anywhere.
+- To keep your Mac from sleeping while it serves the dashboard, run `caffeinate -i python -m app.cli serve --phone`.
+  Close the terminal to stop.
+- Changing `APP_PASSCODE` signs out every device. **Sign out** is in Settings.
+
 ## How the numbers work
 
 - **Training load per activity:** Banister TRIMP from average HR when HR was recorded. If not, Garmin training load,
@@ -147,13 +188,16 @@ app/
   sync/garmin.py   Garmin import (activities + daily wellness)
   sync/strava.py   Strava OAuth + import, dedupe against Garmin
   demo.py          synthetic data generator
-  cli.py           serve / sync / garmin-login / demo
-  static/          index.html, app.js, styles.css, vendored Chart.js 4.4.1 (MIT)
+  auth.py          optional passcode login for phone access
+  cli.py           serve (--demo, --phone) / sync / garmin-login / demo
+  static/          index.html, app.js, styles.css, phone-app manifest, service worker and icons,
+                   vendored Chart.js 4.4.1 (MIT)
 tests/             pytest suite (python -m pytest)
 ```
 
 ## Notes
 
-- Keep it on `localhost`. There is no login screen, and anyone who can reach the server can read your data and change your settings.
+- Without `APP_PASSCODE` the dashboard only listens on your own computer and has no login. Never expose it to the
+  internet (port forwarding, a public tunnel) — use Tailscale for access from elsewhere.
 - Garmin can change its private endpoints without warning. The importer looks values up by name and keeps
   going if one endpoint fails, so you lose one metric rather than the whole sync.
