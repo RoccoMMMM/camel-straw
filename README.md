@@ -57,8 +57,12 @@ to Anthropic's API. Everything else stays on your computer.
 
 ## Quick start
 
+Needs **Python 3.10 or newer**. Check with `python3 --version`. Macs come with Python 3.9, which is too old:
+install a newer one with `brew install python@3.12` (Homebrew) or from <https://www.python.org/downloads/>,
+then use `python3.12` in the first command below.
+
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # Try it with 6 months of realistic sample data (no accounts needed):

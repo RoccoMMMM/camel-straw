@@ -12,7 +12,11 @@ import getpass
 import os
 import sys
 
-from . import config
+if sys.version_info < (3, 10):
+    sys.exit(f"This app needs Python 3.10 or newer; you're running {sys.version.split()[0]}. "
+             "See 'Quick start' in README.md for how to install a newer Python.")
+
+from . import config  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
