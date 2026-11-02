@@ -579,6 +579,46 @@
   }
   let chatEmpty;
 
+  // ---------- export for Claude ----------
+  async function refreshExport() {
+    const sections = $$("#export-dialog .export-opts input[type=checkbox]:checked").map((c) => c.value);
+    const days = $("#export-days").value;
+    const box = $("#export-text");
+    box.value = "Loading…";
+    try {
+      const res = await fetch(`/api/export?days=${days}&sections=${sections.join(",") || "summary"}`);
+      if (res.status === 401) { location.href = "/login"; return; }
+      if (!res.ok) throw new Error(res.statusText);
+      box.value = await res.text();
+      const kb = Math.round(box.value.length / 1000);
+      $("#export-size").textContent = `${box.value.length.toLocaleString()} characters` + (kb > 60 ? " (long; try a shorter period)" : "");
+    } catch (e) { box.value = "Couldn't build the export: " + e.message; }
+  }
+
+  function openExport() {
+    const dlg = $("#export-dialog");
+    if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+    refreshExport();
+  }
+
+  async function copyExport() {
+    const box = $("#export-text");
+    try {
+      await navigator.clipboard.writeText(box.value);   // needs https or localhost
+    } catch {
+      box.focus(); box.select(); box.setSelectionRange(0, box.value.length);
+      if (!document.execCommand("copy")) { toast("Text selected: copy it with your device's Copy."); return; }
+    }
+    toast("Copied. Paste it into a Claude chat.");
+  }
+
+  function downloadExport() {
+    const blob = new Blob([$("#export-text").value], { type: "text/markdown" });
+    const a = el("a", { href: URL.createObjectURL(blob), download: `training-data-${new Date().toISOString().slice(0, 10)}.md` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   // ---------- settings ----------
   async function loadCoachStatus() {
     try { const s = await api("/api/status"); $("#coach-setup").hidden = s.coach.configured; } catch {}
@@ -649,6 +689,13 @@
       $$("#ef-sport button").forEach((x) => x.classList.toggle("on", x === b));
       renderEfficiency();
     }));
+
+    $("#export-open").addEventListener("click", openExport);
+    $("#export-open-coach").addEventListener("click", openExport);
+    $("#export-days").addEventListener("change", refreshExport);
+    $$("#export-dialog .export-opts input[type=checkbox]").forEach((c) => c.addEventListener("change", refreshExport));
+    $("#export-copy").addEventListener("click", copyExport);
+    $("#export-download").addEventListener("click", downloadExport);
 
     chatEmpty = $("#chat-empty");
     $("#chat-form").addEventListener("submit", (e) => { e.preventDefault(); sendChat($("#chat-input").value); });

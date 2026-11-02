@@ -71,6 +71,7 @@
     <div class="coach">
       <aside class="card coach-side">
         <button class="btn" id="chat-new" type="button">New chat</button>
+        <button class="btn ghost" id="export-open-coach" type="button">Export for Claude</button>
         <h2 class="side-h">Recent</h2>
         <ul id="chat-list" class="chat-list"></ul>
       </aside>
@@ -295,6 +296,12 @@
         <ul id="sync-log" class="log"></ul>
       </div>
       <div class="card">
+        <h2>Export for Claude</h2>
+        <p class="sub">Copy a text summary of your data to paste into a Claude chat, for example to plan macros or
+          ask about your training without using the Coach tab.</p>
+        <div class="row"><button class="btn" id="export-open" type="button">Export data…</button></div>
+      </div>
+      <div class="card">
         <h2>Use on your phone</h2>
         <p class="sub">Open this dashboard on your phone, then add it to your home screen: in Safari tap Share → <strong>Add to Home Screen</strong>; in Chrome tap ⋮ → <strong>Add to Home screen</strong>. See README → "Phone app" for connecting your phone.</p>
         <p id="phone-status" class="status-line"></p>
@@ -303,6 +310,35 @@
     </div>
   </section>
 </main>
+<dialog id="export-dialog" class="dialog" aria-labelledby="export-title">
+  <form method="dialog" class="dialog-inner">
+    <div class="dialog-head">
+      <h2 id="export-title">Export for Claude</h2>
+      <button class="btn ghost" value="close" aria-label="Close">Close</button>
+    </div>
+    <div class="row export-opts">
+      <label>Period
+        <select id="export-days">
+          <option value="14">Last 14 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+      </label>
+      <label><input type="checkbox" value="summary" checked> Status &amp; targets</label>
+      <label><input type="checkbox" value="daily" checked> Daily log</label>
+      <label><input type="checkbox" value="activities" checked> Activities</label>
+      <label><input type="checkbox" value="weekly" checked> Weekly totals</label>
+    </div>
+    <textarea id="export-text" readonly rows="14" aria-label="Export text"></textarea>
+    <div class="row">
+      <button class="btn" type="button" id="export-copy">Copy</button>
+      <button class="btn ghost" type="button" id="export-download">Download .md</button>
+      <span class="muted" id="export-size"></span>
+    </div>
+    <p class="muted small-print">Paste it into a new chat, then ask, e.g. "Plan my macros for next week" or
+      "Why has my HRV dropped?". It contains your health data, so only paste it where you're comfortable sharing it.</p>
+  </form>
+</dialog>
 <script src="/static/app.js"></script>
 </body>
 </html>

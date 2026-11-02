@@ -11,11 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analytics, auth, coach, config, db, diagnostics
+from . import analytics, auth, coach, config, db, diagnostics, export
 from .sync import garmin, runner, strava
 
 STATIC = Path(__file__).parent / "static"
@@ -128,6 +128,16 @@ def dashboard(days: int = Query(90, ge=14, le=730)) -> dict[str, Any]:
         "activities": sorted([a for a in ctx["activities"] if a["date"] >= cutoff],
                              key=lambda a: a["start_time"], reverse=True),
     }
+
+
+@app.get("/api/export", response_class=PlainTextResponse)
+def export_markdown(days: int = Query(30, ge=7, le=365),
+                    sections: str = Query(",".join(export.SECTIONS), pattern=r"^[a-z,]+$")) -> PlainTextResponse:
+    """Your data as Markdown, for pasting into a Claude chat."""
+    conn = db.get_conn()
+    ctx = analytics.load_context(conn, db.get_settings(conn), days=max(days, 120))
+    wanted = [x for x in sections.split(",") if x in export.SECTIONS] or list(export.SECTIONS)
+    return PlainTextResponse(export.build(ctx, days, wanted), media_type="text/markdown; charset=utf-8")
 
 
 # ---- habits ------------------------------------------------------------------

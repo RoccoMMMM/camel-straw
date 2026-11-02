@@ -55,6 +55,18 @@ The coach uses the `claude-opus-5-5` model at medium effort by default. Change t
 data costs more. To answer, the app sends the data the coach looks up (activities, sleep, HRV, habits and notes)
 to Anthropic's API. Everything else stays on your computer.
 
+### Export for Claude
+
+**Settings → Export data…** (or **Export for Claude** in the Coach tab) builds a plain-text summary of your data to
+paste into any Claude chat. Use it to plan macros, or to ask about your training if the Coach tab isn't set up.
+It includes your profile and targets, current status and flagged issues, a day-by-day log (sleep, HRV, resting HR,
+bed/wake, drinks, calories eaten and burned, macros, notes), your activities and weekly totals. Each section explains
+its columns, so the chat reads them correctly.
+
+Choose the period (14, 30 or 90 days) and the sections, then **Copy** or **Download .md**. 30 days is a good
+default; 90 days of everything gets long. The export contains your health data, so paste it only where you're
+comfortable sharing it.
+
 ## Quick start
 
 Needs **Python 3.10 or newer**. Check with `python3 --version`. Macs come with Python 3.9, which is too old:
@@ -184,6 +196,7 @@ app/
   analytics.py     load model, CTL/ATL/TSB, weekly volume, efficiency, habit correlations
   diagnostics.py   the rule engine and readiness score
   coach.py         Coach chat: Claude conversation, data-lookup tools, habit logging
+  export.py        Markdown export for pasting into a Claude chat
   db.py            SQLite schema and helpers
   sync/garmin.py   Garmin import (activities + daily wellness)
   sync/strava.py   Strava OAuth + import, dedupe against Garmin
