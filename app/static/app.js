@@ -33,6 +33,13 @@
     const w = arr.slice(Math.max(0, i - n + 1), i + 1).filter((v) => v != null);
     return w.length >= Math.ceil(n / 2) ? +(w.reduce((a, b) => a + b, 0) / w.length).toFixed(1) : null;
   });
+  // Attach a listener if the element exists. If the page and script are ever out of sync (e.g. a cached page after an
+  // update), the rest of the buttons keep working instead of all failing at the first missing one.
+  const on = (sel, ev, fn) => {
+    const node = document.querySelector(sel);
+    if (node) node.addEventListener(ev, fn);
+    else console.warn("Missing element", sel, "- reload the page (⌘⇧R) to pick up the latest version.");
+  };
   const el = (tag, props = {}, ...kids) => {
     const n = document.createElement(tag);
     Object.entries(props).forEach(([k, v]) => (k === "class" ? (n.className = v) : k === "text" ? (n.textContent = v) : n.setAttribute(k, v)));
@@ -671,10 +678,10 @@
 
   function bind() {
     window.addEventListener("hashchange", showTab);
-    $("#range").addEventListener("change", (e) => { state.range = +e.target.value; load(); });
-    $("#sync-btn").addEventListener("click", () => doSync());
+    on("#range", "change", (e) => { state.range = +e.target.value; load(); });
+    on("#sync-btn", "click", () => doSync());
     $$("[data-sync]").forEach((b) => b.addEventListener("click", () => doSync(b.dataset.sync, b.dataset.days)));
-    $("#theme-btn").addEventListener("click", () => {
+    on("#theme-btn", "click", () => {
       const dark = document.documentElement.dataset.theme
         ? document.documentElement.dataset.theme === "dark"
         : matchMedia("(prefers-color-scheme: dark)").matches;
@@ -690,20 +697,20 @@
       renderEfficiency();
     }));
 
-    $("#export-open").addEventListener("click", openExport);
-    $("#export-open-coach").addEventListener("click", openExport);
-    $("#export-days").addEventListener("change", refreshExport);
+    on("#export-open", "click", openExport);
+    on("#export-open-coach", "click", openExport);
+    on("#export-days", "change", refreshExport);
     $$("#export-dialog .export-opts input[type=checkbox]").forEach((c) => c.addEventListener("change", refreshExport));
-    $("#export-copy").addEventListener("click", copyExport);
-    $("#export-download").addEventListener("click", downloadExport);
+    on("#export-copy", "click", copyExport);
+    on("#export-download", "click", downloadExport);
 
     chatEmpty = $("#chat-empty");
-    $("#chat-form").addEventListener("submit", (e) => { e.preventDefault(); sendChat($("#chat-input").value); });
-    $("#chat-input").addEventListener("keydown", (e) => {
+    on("#chat-form", "submit", (e) => { e.preventDefault(); sendChat($("#chat-input").value); });
+    on("#chat-input", "keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(e.target.value); }
     });
     $$("#chat-chips button").forEach((b) => b.addEventListener("click", () => sendChat(b.textContent)));
-    $("#chat-new").addEventListener("click", () => { state.conv = null; showChat([]); loadChatList(); $("#chat-input").focus(); });
+    on("#chat-new", "click", () => { state.conv = null; showChat([]); loadChatList(); $("#chat-input").focus(); });
 
     const hf = $("#habit-form");
     hf.elements.date.addEventListener("change", (e) => loadHabit(e.target.value));
@@ -715,13 +722,13 @@
         load();
       } catch (err) { toast("Could not save: " + err.message); }
     });
-    $("#habit-clear").addEventListener("click", async () => {
+    on("#habit-clear", "click", async () => {
       if (!confirm("Delete the manual entry for this date?")) return;
       await api(`/api/habits/${hf.elements.date.value}`, { method: "DELETE" });
       loadHabit(hf.elements.date.value); load();
     });
 
-    $("#settings-form").addEventListener("submit", async (e) => {
+    on("#settings-form", "submit", async (e) => {
       e.preventDefault();
       const f = e.target;
       try {
@@ -731,7 +738,7 @@
       } catch (err) { toast("Could not save: " + err.message); }
     });
 
-    $("#garmin-form").addEventListener("submit", async (e) => {
+    on("#garmin-form", "submit", async (e) => {
       e.preventDefault();
       const f = e.target, btn = f.querySelector("button"); btn.disabled = true;
       try {
@@ -741,15 +748,15 @@
         else { toast("Garmin connected — syncing…"); loadStatus(); doSync("garmin"); }
       } catch (err) { toast(err.message); } finally { btn.disabled = false; }
     });
-    $("#garmin-mfa").addEventListener("submit", async (e) => {
+    on("#garmin-mfa", "submit", async (e) => {
       e.preventDefault();
       try {
         await api("/api/garmin/mfa", { method: "POST", body: { code: e.target.code.value.trim() } });
         $("#garmin-mfa").hidden = true; toast("Garmin connected — syncing…"); loadStatus(); doSync("garmin");
       } catch (err) { toast(err.message); }
     });
-    $("#garmin-disconnect").addEventListener("click", async () => { await api("/api/garmin/disconnect", { method: "POST" }); loadStatus(); });
-    $("#strava-disconnect").addEventListener("click", async () => { await api("/api/strava/disconnect", { method: "POST" }); loadStatus(); });
+    on("#garmin-disconnect", "click", async () => { await api("/api/garmin/disconnect", { method: "POST" }); loadStatus(); });
+    on("#strava-disconnect", "click", async () => { await api("/api/strava/disconnect", { method: "POST" }); loadStatus(); });
   }
 
   function themeLabel() {

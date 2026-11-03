@@ -37,6 +37,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Fitness Dashboard", lifespan=lifespan)
 app.middleware("http")(auth.middleware)
+
+
+@app.middleware("http")
+async def no_stale_assets(request: Request, call_next):
+    # Make the browser check for a newer page/script every time, so an update shows up on the next reload
+    # instead of an old page running against new code.
+    resp = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        resp.headers.setdefault("Cache-Control", "no-cache")
+    return resp
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 

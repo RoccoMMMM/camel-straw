@@ -1,6 +1,6 @@
 // Keeps the app shell (page, styles, scripts, icons) available so the app opens instantly and
 // shows a clear message when your computer is unreachable. Data (/api) is never cached.
-const CACHE = "shell-v1";
+const CACHE = "shell-v2";
 const SHELL = ["/", "/static/styles.css", "/static/app.js", "/static/vendor/chart-4.4.1.umd.js",
                "/static/icons/icon-192.png", "/manifest.webmanifest"];
 
