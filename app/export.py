@@ -11,7 +11,7 @@ from typing import Any, Iterable
 
 from . import analytics, diagnostics
 
-SECTIONS = ("summary", "daily", "activities", "weekly")
+SECTIONS = ("summary", "daily", "activities", "weekly", "macros")
 
 
 def _fmt(v: Any, digits: int = 0) -> str:
@@ -61,7 +61,7 @@ def _pace_or_speed(a: dict) -> str:
     return f"{v * 3.6:.1f} km/h"
 
 
-def build(ctx: dict, days: int = 30, sections: Iterable[str] = SECTIONS) -> str:
+def build(ctx: dict, days: int = 30, sections: Iterable[str] = SECTIONS, conn: Any = None) -> str:
     sections = set(sections)
     today = ctx["today"]
     start = today - timedelta(days=days - 1)
@@ -157,5 +157,22 @@ def build(ctx: dict, days: int = 30, sections: Iterable[str] = SECTIONS) -> str:
             rows.append([w["week"], _fmt(w["hours"], 1), _fmt(w["distance_km"]), str(w["count"]), _fmt(w["load"]),
                          _fmt(ld.get("ctl")), _fmt(ld.get("tsb")), sports])
         out.append(_table(["Week of", "Hours", "km", "Sessions", "Load", "Fitness", "Form", "By sport"], rows))
+
+    if "macros" in sections and conn is not None:
+        from . import nutrition
+        plan = nutrition.week_plan(conn, s, nutrition.monday(today), today)
+        a_ = plan["assumptions"]
+        out += ["", f"## Macro targets for this week (from {plan['week_start']})",
+                f"Calculated by the dashboard from resting metabolism ({a_['bmr_kcal']} kcal) × daily activity "
+                f"{a_['activity_factor']} + training (done for past days, planned for upcoming days), goal: "
+                f"{a_['goal']}. Carb guide is g per kg body weight for that day's training.", ""]
+        rows = []
+        for d_ in plan["days"]:
+            training = "; ".join(f"{(x.get('title') or x.get('sport'))} {_dur((x.get('duration_min') or 0) * 60)} "
+                                 f"{x.get('intensity') or ''}".strip() for x in d_["sessions"]) or "rest"
+            rows.append([f"{d_['weekday']} {d_['date'][5:]}", d_["source"], training, str(d_["kcal"]), str(d_["protein_g"]),
+                         f"{d_['carbs_g']} ({d_['carbs_g_per_kg']} g/kg; guide {d_['carb_band'][0]:g}–{d_['carb_band'][1]:g})",
+                         str(d_["fat_g"])])
+        out.append(_table(["Day", "Status", "Training", "kcal", "Protein g", "Carbs g", "Fat g"], rows))
 
     return "\n".join(out) + "\n"

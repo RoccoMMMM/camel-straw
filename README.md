@@ -15,6 +15,7 @@ Everything runs on your own computer. Data is stored in one SQLite file (`data/f
 | **Coach** | Chat with an AI coach that reads your synced data before answering, explains good and bad sessions, and logs habits you type in |
 | **Training** | Fitness (CTL) / fatigue (ATL) / form (TSB), weekly hours by sport, aerobic-efficiency trend, VO₂ max, intensity mix, activity list |
 | **Recovery & Sleep** | HRV vs baseline, resting HR, sleep duration vs target, bed→wake schedule, sleep score, stress and Body Battery |
+| **Plan** | Your training programming (uploaded or added by hand) and **daily macro targets** for any week, adjusted to each day's training |
 | **Habits** | Daily log (bed/wake time, sleep quality, drinks, calories, macros, water, caffeine, energy, soreness, notes), charts, and **your own data on how habits affect recovery** (for example "after 2+ drinks your HRV is 7 ms lower") |
 | **Settings** | Connect Garmin and Strava, athlete profile (max HR, resting HR, weight, targets), sync controls and log |
 
@@ -60,12 +61,50 @@ to Anthropic's API. Everything else stays on your computer.
 **Settings → Export data…** (or **Export for Claude** in the Coach tab) builds a plain-text summary of your data to
 paste into any Claude chat. Use it to plan macros, or to ask about your training if the Coach tab isn't set up.
 It includes your profile and targets, current status and flagged issues, a day-by-day log (sleep, HRV, resting HR,
-bed/wake, drinks, calories eaten and burned, macros, notes), your activities and weekly totals. Each section explains
+bed/wake, drinks, calories eaten and burned, macros, notes), your activities, weekly totals and this week's macro
+targets. Each section explains
 its columns, so the chat reads them correctly.
 
 Choose the period (14, 30 or 90 days) and the sections, then **Copy** or **Download .md**. 30 days is a good
 default; 90 days of everything gets long. The export contains your health data, so paste it only where you're
 comfortable sharing it.
+
+### Plan and macros
+
+The **Plan** tab gives you calorie, protein, carb and fat targets for each day of any week, based on that day's
+training:
+
+- **Past days** use what you actually did (synced from Garmin/Strava). **Today and upcoming days** use your planned
+  sessions.
+- **Calories** = resting metabolism (from weight, height, age and sex) × your everyday activity outside training,
+  plus training calories, plus or minus your goal. "Auto" activity learns your everyday burn from Garmin on rest
+  days. Training calories come from your own recorded sessions (kcal per hour by sport), or standard estimates for
+  sports you haven't recorded yet.
+- **Protein** stays at your g/kg target every day. **Fat** is your % of calories, never below 0.6 g/kg. **Carbs**
+  fill the rest and are checked against sports-nutrition guidance: about 3–5 g/kg on easy days, up to 8–12 g/kg on
+  very big days. If carbs would fall short, fat is trimmed first.
+- **Weight loss:** the deficit is halved on big training days (2 h+ or 45 min+ hard) so you can fuel them. The day
+  before a race of 90 min or longer gets a carb load (8–10 g/kg).
+- **Fuelling notes:** each day lists carbs-per-hour for long sessions, a pre-session meal before hard ones, and
+  recovery food on double days.
+
+Set **height, birth year, goal and fat %** in Settings → Athlete profile. Until you do, the page shows what it's
+assuming.
+
+**Uploading your programming:** paste it or choose a file (CSV, text, PDF or a screenshot), set the date week 1
+starts, then **Read plan**. Check the sessions it found, then **Save to plan**. Multi-week blocks are spread across the
+right weeks. Simple formats are read without AI:
+
+```
+Mon: rest
+Tue: 6x800m intervals 60 min + gym 45 min
+Wed: 1h easy run
+2026-11-15 half marathon race 1:40
+```
+
+or a CSV with columns like `date` (or `day`), `sport` (or `session`), `duration_min`, `intensity`. Anything else, such as
+a coach's spreadsheet, a PDF or a screenshot, is read by Claude and needs `ANTHROPIC_API_KEY`. You can also add or
+remove single sessions by hand. The Coach chat can see your macro plan too: ask "what should I eat on Saturday?".
 
 ## Quick start
 
@@ -197,6 +236,8 @@ app/
   diagnostics.py   the rule engine and readiness score
   coach.py         Coach chat: Claude conversation, data-lookup tools, habit logging
   export.py        Markdown export for pasting into a Claude chat
+  nutrition.py     activity-adjusted daily calorie and macro targets
+  plan_import.py   reads uploaded programming (CSV, simple lines, or Claude for PDFs/screenshots/anything else)
   db.py            SQLite schema and helpers
   sync/garmin.py   Garmin import (activities + daily wellness)
   sync/strava.py   Strava OAuth + import, dedupe against Garmin

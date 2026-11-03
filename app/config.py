@@ -36,4 +36,11 @@ DEFAULT_SETTINGS = {
     "sleep_target_h": 8.0,
     "protein_target_g_per_kg": 1.6,
     "weekly_drink_limit": 7,
+    # Macro calculator
+    "height_cm": None,        # needed for resting metabolism (Mifflin-St Jeor)
+    "birth_year": None,
+    "activity_level": "auto",  # non-exercise activity: auto (from Garmin), sedentary, light, active, very_active
+    "goal": "maintain",       # maintain, lose, gain
+    "goal_rate_kg_week": 0.25,
+    "fat_pct": 25,            # share of calories from fat (a floor of 0.6 g/kg always applies)
 }

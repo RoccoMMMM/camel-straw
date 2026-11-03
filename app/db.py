@@ -89,6 +89,20 @@ CREATE TABLE IF NOT EXISTS habits (          -- manual log; overrides Garmin val
     updated_at    TEXT
 );
 
+CREATE TABLE IF NOT EXISTS planned_sessions (   -- your programming, uploaded or added by hand
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    date         TEXT NOT NULL,              -- YYYY-MM-DD
+    sport        TEXT NOT NULL,              -- same categories as activities, or "rest"
+    title        TEXT,
+    duration_min REAL,
+    distance_km  REAL,
+    intensity    TEXT,                       -- easy, moderate, hard, race, rest
+    notes        TEXT,
+    source       TEXT,                       -- upload, manual, coach
+    created_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_plan_date ON planned_sessions(date);
+
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS tokens   (provider TEXT PRIMARY KEY, data TEXT);
 CREATE TABLE IF NOT EXISTS sync_log (

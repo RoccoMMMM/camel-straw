@@ -17,10 +17,11 @@ def seed(conn: sqlite3.Connection, days: int = 180, today: date | None = None, r
     rnd = random.Random(rng_seed)
     today = today or date.today()
     start = today - timedelta(days=days)
-    for t in ("activities", "daily_metrics", "habits"):
+    for t in ("activities", "daily_metrics", "habits", "planned_sessions"):
         conn.execute(f"DELETE FROM {t}")
     db.save_settings({"max_hr": 188, "resting_hr": 50, "sex": "male", "weight_kg": 74, "sleep_target_h": 8,
-                      "protein_target_g_per_kg": 1.6, "weekly_drink_limit": 7}, conn)
+                      "protein_target_g_per_kg": 1.8, "weekly_drink_limit": 7, "height_cm": 180,
+                      "birth_year": 1994}, conn)
 
     fatigue = 0.0
     fitness_gain = 0.0
@@ -165,4 +166,16 @@ def seed(conn: sqlite3.Connection, days: int = 180, today: date | None = None, r
             "duration_s": 78 * 60, "moving_s": 76 * 60, "distance_m": round(spd * 76 * 60), "elevation_m": 130,
             "avg_hr": hr, "max_hr": hr + 18, "avg_speed": spd, "calories": 650, "aerobic_te": 2.8, "anaerobic_te": 0.2,
         }, key="id")
+    # A two-week plan from this Monday, ending in a half marathon, for the Plan tab and the macro calculator.
+    monday = today - timedelta(days=today.weekday())
+    plan = [(0, "rest", "Rest day", 0, "rest"), (1, "run", "6x800m intervals", 60, "hard"), (1, "strength", "Gym: legs", 45, "moderate"),
+            (2, "ride", "Easy spin", 60, "easy"), (3, "run", "Tempo 3x10 min", 55, "moderate"), (4, "swim", "Technique swim", 40, "easy"),
+            (5, "ride", "Long ride", 180, "easy"), (6, "run", "Long run", 100, "easy"),
+            (7, "rest", "Rest day", 0, "rest"), (8, "run", "Strides + easy", 45, "easy"), (9, "ride", "Sweet spot 2x20", 75, "moderate"),
+            (10, "run", "Race-pace 2x15 min", 60, "moderate"), (11, "rest", "Rest day", 0, "rest"), (12, "run", "Shakeout", 25, "easy"),
+            (13, "run", "Half marathon", 100, "race")]
+    for off, sport, title, mins, intensity in plan:
+        conn.execute("INSERT INTO planned_sessions (date, sport, title, duration_min, intensity, source, created_at) "
+                     "VALUES (?,?,?,?,?,'manual',?)",
+                     ((monday + timedelta(days=off)).isoformat(), sport, title, mins or None, intensity, db.now()))
     conn.commit()

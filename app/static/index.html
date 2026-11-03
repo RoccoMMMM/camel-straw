@@ -24,6 +24,7 @@
     <a href="#coach" data-tab="coach">Coach</a>
     <a href="#training" data-tab="training">Training</a>
     <a href="#recovery" data-tab="recovery"><span class="long">Recovery &amp; Sleep</span><span class="short">Recovery</span></a>
+    <a href="#plan" data-tab="plan">Plan</a>
     <a href="#habits" data-tab="habits">Habits</a>
     <a href="#settings" data-tab="settings">Settings</a>
   </nav>
@@ -183,6 +184,71 @@
     </div>
   </section>
 
+  <!-- PLAN & MACROS -->
+  <section id="tab-plan" class="tab">
+    <div class="plan-head">
+      <button class="btn ghost" id="plan-prev" type="button" aria-label="Previous week">‹</button>
+      <h2 id="plan-week-label">This week</h2>
+      <button class="btn ghost" id="plan-next" type="button" aria-label="Next week">›</button>
+      <button class="btn ghost" id="plan-this" type="button">This week</button>
+    </div>
+    <div id="plan-warnings"></div>
+    <div class="grid two">
+      <div class="card span2">
+        <h2>Daily macros</h2>
+        <p class="sub" id="macro-sub">Targets adjust to each day's training: what you did on past days, your plan for upcoming ones.</p>
+        <div class="tiles" id="macro-avg"></div>
+        <div class="chart small"><canvas id="c-macros"></canvas></div>
+        <div id="macro-days" class="macro-days"></div>
+        <p class="muted small-print" id="macro-assumptions"></p>
+      </div>
+      <div class="card">
+        <h2>Planned sessions</h2>
+        <p class="sub">This week's programming. Upload a plan, or add sessions by hand.</p>
+        <ul id="plan-list" class="plan-list"></ul>
+        <form id="plan-add" class="form plan-add">
+          <label>Date <input type="date" name="date" required></label>
+          <label>Sport <select name="sport">
+            <option value="run">Run</option><option value="ride">Ride</option><option value="swim">Swim</option>
+            <option value="strength">Strength</option><option value="ruck">Ruck</option><option value="row">Row</option>
+            <option value="hike">Hike</option><option value="walk">Walk</option><option value="yoga">Yoga</option>
+            <option value="multisport">Multisport</option><option value="other">Other</option><option value="rest">Rest day</option>
+          </select></label>
+          <label>Minutes <input type="number" name="duration_min" min="0" max="1440"></label>
+          <label>Intensity <select name="intensity">
+            <option value="easy">Easy</option><option value="moderate" selected>Moderate</option>
+            <option value="hard">Hard</option><option value="race">Race</option>
+          </select></label>
+          <label class="wide">Title <input name="title" maxlength="120" placeholder="e.g. 6x800m intervals"></label>
+          <div class="row"><button class="btn" type="submit">Add session</button>
+            <button class="btn ghost" type="button" id="plan-clear">Clear this week</button></div>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Upload programming</h2>
+        <p class="sub">Paste your plan or choose a file: CSV, text, PDF or a screenshot. Simple formats like
+          "Mon: 60 min easy run" are read directly; anything else is read by Claude (needs ANTHROPIC_API_KEY).</p>
+        <form id="plan-upload" class="form">
+          <label class="wide">Week 1 starts on <input type="date" name="week_start" required></label>
+          <label class="wide">Paste programming <textarea name="text" rows="6" maxlength="200000"
+            placeholder="Mon: rest&#10;Tue: 6x800m intervals 60 min + gym 45 min&#10;Wed: 1h easy run&#10;Sat: long run 2h z2"></textarea></label>
+          <label class="wide">…or choose a file <input type="file" name="file"
+            accept=".csv,.txt,.md,.tsv,.pdf,.png,.jpg,.jpeg,.webp,text/plain,text/csv,application/pdf,image/*"></label>
+          <div class="row"><button class="btn" type="submit" id="plan-read">Read plan</button>
+            <span class="muted" id="plan-read-status"></span></div>
+        </form>
+        <div id="plan-preview" hidden>
+          <h3 class="preview-h">Check before saving</h3>
+          <p class="muted small-print" id="plan-preview-note"></p>
+          <ul id="plan-preview-list" class="plan-list"></ul>
+          <label class="check"><input type="checkbox" id="plan-replace" checked> Replace sessions already planned on these days</label>
+          <div class="row"><button class="btn" type="button" id="plan-save">Save to plan</button>
+            <button class="btn ghost" type="button" id="plan-discard">Discard</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- HABITS -->
   <section id="tab-habits" class="tab">
     <div class="grid two">
@@ -282,6 +348,18 @@
           <label>Sleep target (h) <input type="number" name="sleep_target_h" step="0.25" min="5" max="11" required></label>
           <label>Protein target (g/kg) <input type="number" name="protein_target_g_per_kg" step="0.1" min="0.5" max="3.5" required></label>
           <label>Weekly drink limit <input type="number" name="weekly_drink_limit" step="1" min="0" max="50" required></label>
+          <fieldset><legend>For the macro calculator</legend>
+            <label>Height (cm) <input type="number" name="height_cm" min="120" max="230" step="1"></label>
+            <label>Birth year <input type="number" name="birth_year" min="1920" max="2015" step="1"></label>
+            <label>Daily activity outside training <select name="activity_level">
+              <option value="auto">Auto (learn from my watch)</option><option value="sedentary">Sedentary (desk, little walking)</option>
+              <option value="light">Light (some walking)</option><option value="active">Active (on my feet a lot)</option>
+              <option value="very_active">Very active (physical job)</option></select></label>
+            <label>Goal <select name="goal">
+              <option value="maintain">Maintain weight</option><option value="lose">Lose weight</option><option value="gain">Gain weight</option></select></label>
+            <label>Rate (kg/week) <input type="number" name="goal_rate_kg_week" min="0" max="1" step="0.05"></label>
+            <label>Fat (% of calories) <input type="number" name="fat_pct" min="15" max="45" step="1"></label>
+          </fieldset>
           <div class="row"><button class="btn" type="submit">Save profile</button></div>
         </form>
       </div>
@@ -328,6 +406,7 @@
       <label><input type="checkbox" value="daily" checked> Daily log</label>
       <label><input type="checkbox" value="activities" checked> Activities</label>
       <label><input type="checkbox" value="weekly" checked> Weekly totals</label>
+      <label><input type="checkbox" value="macros" checked> This week's macros</label>
     </div>
     <textarea id="export-text" readonly rows="14" aria-label="Export text"></textarea>
     <div class="row">

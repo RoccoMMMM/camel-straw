@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Red
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analytics, auth, coach, config, db, diagnostics, export
+from . import analytics, auth, coach, config, db, diagnostics, export, nutrition, plan_import
 from .sync import garmin, runner, strava
 
 STATIC = Path(__file__).parent / "static"
@@ -147,7 +147,108 @@ def export_markdown(days: int = Query(30, ge=7, le=365),
     conn = db.get_conn()
     ctx = analytics.load_context(conn, db.get_settings(conn), days=max(days, 120))
     wanted = [x for x in sections.split(",") if x in export.SECTIONS] or list(export.SECTIONS)
-    return PlainTextResponse(export.build(ctx, days, wanted), media_type="text/markdown; charset=utf-8")
+    return PlainTextResponse(export.build(ctx, days, wanted, conn), media_type="text/markdown; charset=utf-8")
+
+
+# ---- training plan + macros --------------------------------------------------
+
+DAY = r"^\d{4}-\d{2}-\d{2}$"
+
+
+class PlannedSession(BaseModel):
+    date: str = Field(pattern=DAY)
+    sport: str = Field(pattern="^(" + "|".join(plan_import.SPORTS) + ")$")
+    title: str | None = Field(None, max_length=120)
+    duration_min: float | None = Field(None, ge=0, le=24 * 60)
+    distance_km: float | None = Field(None, ge=0, le=1000)
+    intensity: str = Field("moderate", pattern="^(" + "|".join(plan_import.INTENSITIES) + ")$")
+    notes: str | None = Field(None, max_length=500)
+
+
+class SaveSessions(BaseModel):
+    sessions: list[PlannedSession] = Field(max_length=500)
+    replace: bool = False      # remove what's already planned on those dates first
+    source: str = Field("upload", pattern="^(upload|manual|coach)$")
+
+
+class UploadedFile(BaseModel):
+    name: str = Field(max_length=200)
+    media_type: str = Field(pattern="^(application/pdf|image/(png|jpeg|webp|gif))$")
+    data: str = Field(max_length=8_000_000)    # base64; about 6 MB of file
+
+
+class ParseRequest(BaseModel):
+    week_start: str = Field(pattern=DAY)
+    text: str | None = Field(None, max_length=200_000)
+    file: UploadedFile | None = None
+
+
+def _week(day: str | None) -> date:
+    try:
+        return nutrition.monday(date.fromisoformat(day) if day else date.today())
+    except ValueError:
+        raise HTTPException(400, "week must be YYYY-MM-DD")
+
+
+@app.get("/api/plan")
+def get_plan(week: str | None = None) -> dict[str, Any]:
+    conn = db.get_conn()
+    return nutrition.week_plan(conn, db.get_settings(conn), _week(week))
+
+
+@app.post("/api/plan/parse")
+def parse_plan(body: ParseRequest) -> dict[str, Any]:
+    """Read pasted or uploaded programming into sessions to review. Nothing is saved yet."""
+    import anthropic
+
+    if not body.text and not body.file:
+        raise HTTPException(400, "Paste your programming or choose a file.")
+    conn = db.get_conn()
+    settings = db.get_settings(conn)
+    ctx = analytics.load_context(conn, settings, days=90)
+    easy = [1000 / a["avg_speed"] / 60 for a in ctx["activities"]
+            if a.get("sport") == "run" and a.get("intensity") == "easy" and a.get("avg_speed")]
+    pace = sorted(easy)[len(easy) // 2] if easy else 6.0
+    try:
+        return plan_import.parse(body.text, date.fromisoformat(body.week_start), date.today(),
+                                 body.file.model_dump() if body.file else None, coach_configured(), pace)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except anthropic.AuthenticationError:
+        raise HTTPException(400, "Reading this needs a valid ANTHROPIC_API_KEY in .env.")
+    except anthropic.APIStatusError as e:
+        raise HTTPException(502, f"Claude couldn't read the plan right now ({e.status_code}). Try again shortly.")
+    except anthropic.APIConnectionError:
+        raise HTTPException(502, "Couldn't reach the Anthropic API. Check your internet connection.")
+
+
+@app.post("/api/plan/sessions")
+def save_sessions(body: SaveSessions) -> dict[str, Any]:
+    with db.tx() as conn:
+        if body.replace:
+            for day in sorted({s.date for s in body.sessions}):
+                conn.execute("DELETE FROM planned_sessions WHERE date=?", (day,))
+        for s in body.sessions:
+            conn.execute("INSERT INTO planned_sessions (date, sport, title, duration_min, distance_km, intensity, notes, "
+                         "source, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                         (s.date, s.sport, s.title, s.duration_min, s.distance_km, s.intensity, s.notes, body.source, db.now()))
+    return {"saved": len(body.sessions)}
+
+
+@app.delete("/api/plan/sessions/{session_id}")
+def delete_session(session_id: int) -> dict[str, Any]:
+    with db.tx() as conn:
+        conn.execute("DELETE FROM planned_sessions WHERE id=?", (session_id,))
+    return {"ok": True}
+
+
+@app.delete("/api/plan/week/{week_start}")
+def clear_week(week_start: str) -> dict[str, Any]:
+    start = _week(week_start)
+    with db.tx() as conn:
+        n = conn.execute("DELETE FROM planned_sessions WHERE date >= ? AND date < ?",
+                         (start.isoformat(), (start + timedelta(days=7)).isoformat())).rowcount
+    return {"deleted": n}
 
 
 # ---- habits ------------------------------------------------------------------
@@ -218,6 +319,12 @@ class Settings(BaseModel):
     sleep_target_h: float = Field(ge=5, le=11)
     protein_target_g_per_kg: float = Field(ge=0.5, le=3.5)
     weekly_drink_limit: float = Field(ge=0, le=50)
+    height_cm: float | None = Field(None, ge=120, le=230)
+    birth_year: int | None = Field(None, ge=1920, le=2015)
+    activity_level: str = Field("auto", pattern="^(auto|sedentary|light|active|very_active)$")
+    goal: str = Field("maintain", pattern="^(maintain|lose|gain)$")
+    goal_rate_kg_week: float = Field(0.25, ge=0, le=1)
+    fat_pct: float = Field(25, ge=15, le=45)
 
 
 @app.get("/api/settings")

@@ -4,7 +4,7 @@
 
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
-  const state = { data: null, range: 90, efSport: "run", charts: {}, conv: null, chatBusy: false };
+  const state = { data: null, range: 90, efSport: "run", charts: {}, conv: null, chatBusy: false, planWeek: null, preview: [] };
 
   // ---------- utilities ----------
   async function api(path, opts = {}) {
@@ -160,6 +160,7 @@
     if (q.get("strava") === "scope") toast("Please allow 'View data about your activities' when connecting Strava.");
     if (tab === "settings") loadStatus();
     if (tab === "habits") loadHabit($("#habit-form [name=date]").value);
+    if (tab === "plan") loadPlan();
     if (tab === "coach") { loadChatList(); loadCoachStatus(); setTimeout(() => $("#chat-input").focus(), 50); }
     // Charts in hidden tabs have zero size; redraw the visible ones.
     requestAnimationFrame(() => Object.values(state.charts).forEach((c) => c.resize()));
@@ -626,6 +627,168 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
+
+  // ---------- plan & macros ----------
+  const isoDay = (d) => { const x = new Date(d); x.setMinutes(x.getMinutes() - x.getTimezoneOffset()); return x.toISOString().slice(0, 10); };
+  const mondayOf = (iso) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return isoDay(d); };
+  const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return isoDay(d); };
+  const SPORT_LABEL = { run: "Run", ride: "Ride", swim: "Swim", strength: "Strength", ruck: "Ruck", row: "Row", hike: "Hike",
+    walk: "Walk", yoga: "Yoga", multisport: "Multisport", ski: "Ski", other: "Session", rest: "Rest day" };
+
+  function sessionLine(s) {
+    if (s.sport === "rest") return "Rest day";
+    const bits = [s.title && s.title.toLowerCase() !== s.sport ? s.title : SPORT_LABEL[s.sport] || s.sport];
+    if (s.duration_min) bits.push(fmtDur(s.duration_min * 60));
+    if (s.distance_km) bits.push(`${s.distance_km} km`);
+    if (s.intensity && s.intensity !== "moderate") bits.push(s.intensity);
+    return bits.join(" · ");
+  }
+
+  async function loadPlan(week) {
+    state.planWeek = mondayOf(week || state.planWeek || isoDay(new Date()));
+    const thisWeek = mondayOf(isoDay(new Date()));
+    const end = addDays(state.planWeek, 6);
+    $("#plan-week-label").textContent = state.planWeek === thisWeek ? `This week · ${fmtDate(state.planWeek)} – ${fmtDate(end)}`
+      : `Week of ${fmtDate(state.planWeek)} – ${fmtDate(end)}`;
+    const f = $("#plan-add"); if (!f.elements.date.value || f.elements.date.value < state.planWeek || f.elements.date.value > end)
+      f.elements.date.value = state.planWeek === thisWeek ? isoDay(new Date()) : state.planWeek;
+    const u = $("#plan-upload"); if (!u.elements.week_start.value) u.elements.week_start.value = state.planWeek;
+    try {
+      renderPlan(await api(`/api/plan?week=${state.planWeek}`));
+    } catch (e) { toast("Couldn't load the plan: " + e.message); }
+  }
+
+  function renderPlan(w) {
+    const warn = $("#plan-warnings"); warn.replaceChildren();
+    w.warnings.forEach((m) => warn.append(el("div", { class: "card notice", text: m })));
+
+    const a = w.average, avg = $("#macro-avg"); avg.replaceChildren();
+    [["Calories / day", a.kcal, "kcal"], ["Protein", a.protein_g, "g"], ["Carbs", a.carbs_g, "g"], ["Fat", a.fat_g, "g"]]
+      .forEach(([label, v, unit]) => {
+        const val = el("div", { class: "value" }, String(v)); val.append(el("small", { text: unit }));
+        avg.append(el("div", { class: "tile" }, el("div", { class: "label", text: label }), val, el("div", { class: "delta", text: "weekly average" })));
+      });
+
+    const labels = w.days.map((d) => `${d.weekday} ${new Date(d.date + "T12:00:00").getDate()}`);
+    const stack = { stack: "m", borderRadius: 2, borderSkipped: false, borderColor: css("--surface-1"), borderWidth: { top: 2 } };
+    chart("c-macros", {
+      type: "bar",
+      data: { labels, datasets: [
+        bars("Protein", w.days.map((d) => d.protein_g * 4), css("--series-1"), stack),
+        bars("Carbs", w.days.map((d) => d.carbs_g * 4), css("--series-2"), stack),
+        bars("Fat", w.days.map((d) => d.fat_g * 9), css("--series-3"), stack),
+      ] },
+      options: baseOptions({
+        scales: { x: { stacked: true }, y: { stacked: true, title: { display: true, text: "kcal" } } },
+        plugins: {
+          legend: { display: true, labels: { boxWidth: 10, boxHeight: 10 } },
+          tooltip: { callbacks: {
+            label: (c) => { const d = w.days[c.dataIndex]; const g = { Protein: d.protein_g, Carbs: d.carbs_g, Fat: d.fat_g }[c.dataset.label];
+              return `${c.dataset.label}: ${g} g (${Math.round(c.parsed.y)} kcal)`; },
+            footer: (items) => `Total ${w.days[items[0].dataIndex].kcal} kcal`,
+          } },
+        },
+      }),
+    });
+
+    const box = $("#macro-days"); box.replaceChildren();
+    const today = isoDay(new Date());
+    w.days.forEach((d) => {
+      const train = el("div", { class: "md-train" });
+      if (!d.sessions.length) train.append(el("span", { class: "muted", text: d.source === "done" ? "No training recorded" : "Nothing planned" }));
+      d.sessions.forEach((s) => train.append(el("div", { text: sessionLine(s) })));
+      const tag = el("span", { class: "tag", text: d.source === "done" ? "done" : "planned" });
+      const head = el("div", { class: "md-day" }, el("strong", { text: `${d.weekday} ${fmtDate(d.date)}` }), tag);
+      if (d.date === today) head.append(el("span", { class: "tag today", text: "today" }));
+      const nums = el("div", { class: "md-nums" },
+        el("div", {}, el("b", { text: d.kcal.toLocaleString() }), el("small", { text: " kcal" })),
+        el("div", {}, el("b", { text: d.protein_g }), el("small", { text: " g protein" })),
+        el("div", { title: `Guide for a ${d.carb_band_label}: ${d.carb_band[0]}–${d.carb_band[1]} g/kg` },
+          el("b", { text: d.carbs_g }), el("small", { text: ` g carbs (${d.carbs_g_per_kg} g/kg)` })),
+        el("div", {}, el("b", { text: d.fat_g }), el("small", { text: " g fat" })));
+      const card = el("div", { class: "md" + (d.date === today ? " is-today" : "") }, head, train, nums);
+      if (d.notes.length) {
+        const ul = el("ul", { class: "md-notes" }); d.notes.forEach((n) => ul.append(el("li", { text: n }))); card.append(ul);
+      }
+      box.append(card);
+    });
+
+    const as = w.assumptions, goal = { maintain: "maintain weight", lose: `lose ${as.goal_rate_kg_week} kg/week`, gain: `gain ${as.goal_rate_kg_week} kg/week` }[as.goal] || as.goal;
+    const cal = Object.entries(as.personal_kcal_per_hour).map(([k, v]) => `${SPORT_LABEL[k] || k} ${v}`).join(", ");
+    $("#macro-assumptions").textContent = `Based on: resting metabolism ${as.bmr_kcal} kcal × daily activity ${as.activity_factor} ` +
+      `(${as.activity_factor_source}), plus training, goal: ${goal}. ` +
+      (cal ? `Training calories use your own history (kcal/hour above resting: ${cal}); other sports use standard estimates.`
+           : "Training calories use standard estimates until you have a few recorded sessions with calories.") +
+      " Planning estimates, not medical advice.";
+
+    const list = $("#plan-list"); list.replaceChildren();
+    if (!w.planned_sessions.length) list.append(el("li", { class: "muted", text: "No sessions planned this week." }));
+    w.planned_sessions.forEach((s) => {
+      const del = el("button", { class: "btn ghost small", type: "button", "aria-label": "Remove session", text: "Remove" });
+      del.addEventListener("click", async () => { await api(`/api/plan/sessions/${s.id}`, { method: "DELETE" }); loadPlan(); });
+      list.append(el("li", {},
+        el("span", { class: "pl-day", text: new Date(s.date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric" }) }),
+        el("span", { class: "pl-what" }, sessionLine(s), s.notes ? el("small", { class: "muted", text: " " + s.notes }) : null), del));
+    });
+  }
+
+  function renderPreview(r) {
+    state.preview = r.sessions;
+    $("#plan-preview").hidden = false;
+    const how = { csv: "Read as a CSV table.", lines: "Read line by line.", claude: "Read by Claude." }[r.method] || "";
+    $("#plan-preview-note").textContent = `${r.sessions.length} sessions found. ${how} ${r.assumptions || ""}`;
+    const ul = $("#plan-preview-list"); ul.replaceChildren();
+    state.preview.forEach((s, i) => {
+      const rm = el("button", { class: "btn ghost small", type: "button", text: "Remove" });
+      rm.addEventListener("click", () => { state.preview.splice(i, 1); renderPreview({ ...r, sessions: state.preview }); });
+      ul.append(el("li", {}, el("span", { class: "pl-day", text: new Date(s.date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) }),
+        el("span", { class: "pl-what" }, sessionLine(s), s.notes ? el("small", { class: "muted", text: " " + s.notes }) : null), rm));
+    });
+  }
+
+  const readAsBase64 = (file) => new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(",")[1]);
+    fr.onerror = () => reject(fr.error);
+    fr.readAsDataURL(file);
+  });
+
+  async function readPlan(e) {
+    e.preventDefault();
+    const f = e.target, btn = $("#plan-read"), status = $("#plan-read-status");
+    const body = { week_start: f.elements.week_start.value, text: f.elements.text.value.trim() || null };
+    const file = f.elements.file.files[0];
+    if (file) {
+      if (file.size > 6e6) { toast("That file is over 6 MB. Try a smaller export or a screenshot."); return; }
+      const binary = /pdf|image\//.test(file.type) || /\.(pdf|png|jpe?g|webp)$/i.test(file.name);
+      if (binary) {
+        const type = file.type || (/\.pdf$/i.test(file.name) ? "application/pdf" : "image/png");
+        body.file = { name: file.name, media_type: type === "image/jpg" ? "image/jpeg" : type, data: await readAsBase64(file) };
+      } else {
+        body.text = [body.text, await file.text()].filter(Boolean).join("\n");
+      }
+    }
+    if (!body.text && !body.file) { toast("Paste your programming or choose a file."); return; }
+    btn.disabled = true; status.textContent = body.file || !/^\s*(\w{3,9}|\d{4}-\d\d-\d\d)\b/m.test(body.text || "") ? "Reading… this can take up to a minute." : "Reading…";
+    try {
+      renderPreview(await api("/api/plan/parse", { method: "POST", body }));
+      status.textContent = "";
+    } catch (err) { status.textContent = ""; toast(err.message); }
+    finally { btn.disabled = false; }
+  }
+
+  async function savePreview() {
+    if (!state.preview.length) { toast("Nothing to save."); return; }
+    try {
+      const r = await api("/api/plan/sessions", { method: "POST", body: { sessions: state.preview, replace: $("#plan-replace").checked, source: "upload" } });
+      toast(`Saved ${r.saved} sessions.`);
+      const first = state.preview.map((s) => s.date).sort()[0];
+      state.preview = []; $("#plan-preview").hidden = true;
+      const u = $("#plan-upload"); u.elements.text.value = ""; u.elements.file.value = "";
+      loadPlan(first);
+    } catch (err) { toast("Couldn't save: " + err.message); }
+  }
+
   // ---------- settings ----------
   async function loadCoachStatus() {
     try { const s = await api("/api/status"); $("#coach-setup").hidden = s.coach.configured; } catch {}
@@ -651,7 +814,7 @@
       s.log.forEach((l) => log.append(el("li", { class: l.ok ? "" : "fail", text: `${l.finished_at.replace("T", " ")} — ${l.message}` })));
       const st = await api("/api/settings");
       const f = $("#settings-form");
-      Object.entries(st).forEach(([k, v]) => { if (f.elements[k]) f.elements[k].value = v; });
+      Object.entries(st).forEach(([k, v]) => { if (f.elements[k]) f.elements[k].value = v ?? ""; });
     } catch (e) { toast(e.message); }
   }
 
@@ -704,6 +867,26 @@
     on("#export-copy", "click", copyExport);
     on("#export-download", "click", downloadExport);
 
+    on("#plan-prev", "click", () => loadPlan(addDays(state.planWeek, -7)));
+    on("#plan-next", "click", () => loadPlan(addDays(state.planWeek, 7)));
+    on("#plan-this", "click", () => loadPlan(isoDay(new Date())));
+    on("#plan-upload", "submit", readPlan);
+    on("#plan-save", "click", savePreview);
+    on("#plan-discard", "click", () => { state.preview = []; $("#plan-preview").hidden = true; });
+    on("#plan-add", "submit", async (e) => {
+      e.preventDefault();
+      const f = e.target, v = formValues(f, ["date", "sport", "duration_min", "intensity", "title"]);
+      try {
+        await api("/api/plan/sessions", { method: "POST", body: { sessions: [{ ...v, intensity: v.sport === "rest" ? "rest" : v.intensity }], source: "manual" } });
+        f.elements.title.value = ""; f.elements.duration_min.value = "";
+        loadPlan(v.date);
+      } catch (err) { toast("Couldn't add: " + err.message); }
+    });
+    on("#plan-clear", "click", async () => {
+      if (!confirm("Remove every planned session this week?")) return;
+      await api(`/api/plan/week/${state.planWeek}`, { method: "DELETE" }); loadPlan();
+    });
+
     chatEmpty = $("#chat-empty");
     on("#chat-form", "submit", (e) => { e.preventDefault(); sendChat($("#chat-input").value); });
     on("#chat-input", "keydown", (e) => {
@@ -732,7 +915,8 @@
       e.preventDefault();
       const f = e.target;
       try {
-        const body = formValues(f, ["max_hr", "resting_hr", "sex", "weight_kg", "sleep_target_h", "protein_target_g_per_kg", "weekly_drink_limit"]);
+        const body = formValues(f, ["max_hr", "resting_hr", "sex", "weight_kg", "sleep_target_h", "protein_target_g_per_kg",
+          "weekly_drink_limit", "height_cm", "birth_year", "activity_level", "goal", "goal_rate_kg_week", "fat_pct"]);
         await api("/api/settings", { method: "PUT", body });
         toast("Profile saved"); load();
       } catch (err) { toast("Could not save: " + err.message); }

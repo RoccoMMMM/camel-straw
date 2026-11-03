@@ -266,6 +266,15 @@ def tool_log_habits(conn, args) -> dict:
     return {"saved": True, "date": day.isoformat(), "fields": fields}
 
 
+def tool_get_macro_plan(conn, args) -> dict:
+    from . import nutrition
+
+    week = nutrition.monday(_parse_date(args.get("week_start"), date.today()))
+    plan = nutrition.week_plan(conn, db.get_settings(conn), week)
+    plan.pop("planned_sessions", None)
+    return plan
+
+
 def tool_sync_data(conn, _args) -> dict:
     from .sync import runner
     return {"results": runner.run("all")}
@@ -336,6 +345,15 @@ TOOLS: dict[str, tuple[Callable, dict]] = {
             "notes": {"type": "string", "description": "Free text, e.g. what they ate, illness, travel, heat, how they felt."},
         }, "required": ["date"]},
     }),
+    "get_macro_plan": (tool_get_macro_plan, {
+        "description": "Daily calorie, protein, carb and fat targets for one week (Monday to Sunday), adjusted to "
+                       "each day's training: completed activities for past days, the athlete's planned sessions for "
+                       "upcoming days. Includes fuelling notes, carb guidance in g/kg and the assumptions used. Use "
+                       "it for questions about what to eat, macros or fuelling.",
+        "input_schema": {"type": "object", "properties": {
+            "week_start": {"type": "string", "description": "Any date in the week, YYYY-MM-DD. Defaults to this week."},
+        }},
+    }),
     "sync_data": (tool_sync_data, {
         "description": "Pull the latest data from Garmin and Strava now. Use this when the athlete asks about a session "
                        "that isn't in the data yet. It can take up to a minute.",
@@ -345,7 +363,7 @@ TOOLS: dict[str, tuple[Callable, dict]] = {
 TOOL_DEFS = [{"name": n, **spec} for n, (_, spec) in TOOLS.items()]
 TOOL_LABELS = {"get_overview": "overview", "explain_activity": "session analysis", "get_activities": "activities",
                "get_daily_metrics": "sleep & habits", "get_training_load": "training load",
-               "get_habit_correlations": "habit correlations", "log_habits": "habit log", "sync_data": "sync"}
+               "get_habit_correlations": "habit correlations", "log_habits": "habit log", "get_macro_plan": "macro plan", "sync_data": "sync"}
 
 
 def run_tool(conn, name: str, args: Any) -> tuple[str, bool]:
